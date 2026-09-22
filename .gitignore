@@ -262,3 +262,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Large installer/test binaries (too large for GitHub, kept locally)
+backend/uploads/*.exe

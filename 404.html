@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Redirecting…</title>
+    <script>
+      (function () {
+        var base = '/advance-malicious-file-detection';
+        var path = window.location.pathname;
+        var i = path.indexOf(base);
+        var rest = i >= 0 ? path.slice(i + base.length) : path;
+        if (!rest || rest === '/') {
+          rest = '/';
+        }
+        window.location.replace(base + rest + window.location.search + window.location.hash);
+      })();
+    </script>
+  </head>
+  <body></body>
+</html>

@@ -1,21 +1,31 @@
 import re
+import hashlib
+import os
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models.models import User
-import os
 
 JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-key-change-in-production")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+_BCRYPT_OK = False
+try:
+    from passlib.context import CryptContext
+    _test_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
+    _test_ctx.hash("__test__")
+    pwd_context = _test_ctx
+    _BCRYPT_OK = True
+except Exception:
+    pwd_context = None
+
 security = HTTPBearer()
 
 
@@ -70,12 +80,38 @@ def verify_token(token: str, token_type: str = "access") -> Optional[dict]:
         return None
 
 
+_PBKDF2_ITERATIONS = 310000
+
+
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    if _BCRYPT_OK and pwd_context is not None:
+        try:
+            return pwd_context.hash(password)
+        except Exception:
+            pass
+    salt = secrets.token_hex(16)
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), _PBKDF2_ITERATIONS)
+    return f"pbkdf2:sha256:{_PBKDF2_ITERATIONS}${salt}${dk.hex()}"
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    if hashed_password.startswith("pbkdf2:sha256:"):
+        try:
+            parts = hashed_password.split("$")
+            header = parts[0]
+            salt = parts[1]
+            stored_hash = parts[2]
+            iterations = int(header.split(":")[2])
+            dk = hashlib.pbkdf2_hmac("sha256", plain_password.encode(), salt.encode(), iterations)
+            return secrets.compare_digest(dk.hex(), stored_hash)
+        except Exception:
+            return False
+    if _BCRYPT_OK and pwd_context is not None:
+        try:
+            return pwd_context.verify(plain_password, hashed_password)
+        except Exception:
+            return False
+    return False
 
 
 async def get_current_user(

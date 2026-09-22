@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - uploads_data:/app/uploads
+      - quarantine_data:/app/quarantine
+    environment:
+      - DATABASE_URL=sqlite:///./malicious_detection.db
+      - SECRET_KEY=${SECRET_KEY:-change-this-to-a-random-secret-key}
+      - CLAMAV_ENABLED=true
+      - CLAMAV_HOST=clamav
+      - CLAMAV_PORT=3310
+      - VIRUSTOTAL_API_KEY=${VIRUSTOTAL_API_KEY:-}
+    depends_on:
+      - clamav
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  clamav:
+    image: clamav/clamav:latest
+    ports:
+      - "3310:3310"
+    volumes:
+      - clamav_data:/var/lib/clamav
+    restart: unless-stopped
+
+volumes:
+  uploads_data:
+  quarantine_data:
+  clamav_data:

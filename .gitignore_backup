@@ -1,0 +1,36 @@
+# Environment
+.env
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+frontend/dist/
+
+# Database
+database/*.db
+
+# Uploads
+uploads/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Reports
+reports/*.pdf
+reports/*.html

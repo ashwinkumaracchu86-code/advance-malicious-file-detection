@@ -1,0 +1,95 @@
+{
+  "general": {
+    "system_name": "MFDS - Malicious File Detection System",
+    "language": "en",
+    "timezone": "Asia/Kolkata",
+    "session_timeout": 30,
+    "max_login_attempts": 5
+  },
+  "notifications": {
+    "email_enabled": true,
+    "desktop_enabled": true,
+    "sound_enabled": true,
+    "threat_alerts": true,
+    "scan_complete": true,
+    "weekly_report": false
+  },
+  "scan": {
+    "auto_scan": true,
+    "auto_quarantine": true,
+    "scan_depth": "deep",
+    "max_file_size_mb": 200,
+    "hash_lookup_enabled": true,
+    "entropy_enabled": true,
+    "string_analysis_enabled": true,
+    "pe_analysis_enabled": true,
+    "clamav_enabled": true
+  },
+  "security": {
+    "password_min_length": 8,
+    "require_uppercase": true,
+    "require_numbers": true,
+    "require_special": false,
+    "session_timeout_minutes": 30,
+    "lockout_after_attempts": 5,
+    "lockout_duration_minutes": 15
+  },
+  "advanced": {
+    "debug_mode": false,
+    "log_level": "INFO",
+    "retention_days": 90,
+    "max_upload_size_mb": 50,
+    "rate_limit_per_minute": 120
+  },
+  "appearance": {
+    "theme": "dark"
+  },
+  "smtp": {
+    "host": "",
+    "port": "587",
+    "username": "ashwin_gowda1",
+    "password": "163gpt",
+    "use_tls": true
+  },
+  "monitoring": {
+    "default_folder": ""
+  },
+  "virustotal": {
+    "api_key": ""
+  },
+  "firewall": {
+    "enabled": true,
+    "zones": [
+      {"id": 1, "name": "Public", "type": "public", "color": "#ef4444", "description": "Untrusted - Internet-facing", "cidrs": ["0.0.0.0/0"], "enabled": true, "icon": "globe", "default_policy": "allow"},
+      {"id": 2, "name": "DMZ", "type": "dmz", "color": "#f59e0b", "description": "Semi-trusted - Public services", "cidrs": ["172.16.0.0/12", "192.168.100.0/24"], "enabled": true, "icon": "shield", "default_policy": "deny"},
+      {"id": 3, "name": "Internal", "type": "internal", "color": "#22c55e", "description": "Trusted - Private network", "cidrs": ["192.168.0.0/16", "10.0.0.0/8"], "enabled": true, "icon": "server", "default_policy": "deny"},
+      {"id": 4, "name": "Management", "type": "management", "color": "#8b5cf6", "description": "Admin access only", "cidrs": ["192.168.1.1/32", "192.168.1.2/32"], "enabled": true, "icon": "terminal", "default_policy": "deny"}
+    ],
+    "inter_zone_rules": [
+      {"id": 1, "name": "Public to DMZ - Web", "source_zone": "Public", "dest_zone": "DMZ", "protocol": "tcp", "ports": [80, 443, 8080, 8443], "action": "allow", "enabled": true, "priority": 10, "description": "Web traffic to DMZ"},
+      {"id": 2, "name": "Public to DMZ - SMTP", "source_zone": "Public", "dest_zone": "DMZ", "protocol": "tcp", "ports": [25, 587, 465], "action": "allow", "enabled": true, "priority": 11, "description": "Email to DMZ mail server"},
+      {"id": 3, "name": "Public to DMZ - DNS", "source_zone": "Public", "dest_zone": "DMZ", "protocol": "udp", "ports": [53], "action": "allow", "enabled": true, "priority": 12, "description": "DNS queries"},
+      {"id": 4, "name": "Block Public to Internal", "source_zone": "Public", "dest_zone": "Internal", "protocol": "*", "ports": [], "action": "block", "enabled": true, "priority": 1, "description": "Block direct Internet to Internal"},
+      {"id": 5, "name": "Block Public to Management", "source_zone": "Public", "dest_zone": "Management", "protocol": "*", "ports": [], "action": "block", "enabled": true, "priority": 1, "description": "Block Internet to Management"},
+      {"id": 6, "name": "DMZ to Internal - Proxy", "source_zone": "DMZ", "dest_zone": "Internal", "protocol": "tcp", "ports": [8080, 8443], "action": "allow", "enabled": true, "priority": 20, "description": "DMZ proxy to internal"},
+      {"id": 7, "name": "Block DMZ to Management", "source_zone": "DMZ", "dest_zone": "Management", "protocol": "*", "ports": [], "action": "block", "enabled": true, "priority": 2, "description": "Block DMZ to Management"},
+      {"id": 8, "name": "Internal to DMZ - Full", "source_zone": "Internal", "dest_zone": "DMZ", "protocol": "*", "ports": [], "action": "allow", "enabled": true, "priority": 30, "description": "Internal manages DMZ"},
+      {"id": 9, "name": "Internal to Public - Outbound", "source_zone": "Internal", "dest_zone": "Public", "protocol": "*", "ports": [], "action": "allow", "enabled": true, "priority": 31, "description": "Internal internet access"},
+      {"id": 10, "name": "Management to All", "source_zone": "Management", "dest_zone": "Public", "protocol": "*", "ports": [], "action": "allow", "enabled": true, "priority": 5, "description": "Management full access"},
+      {"id": 11, "name": "Management to DMZ", "source_zone": "Management", "dest_zone": "DMZ", "protocol": "*", "ports": [], "action": "allow", "enabled": true, "priority": 5, "description": "Management manages DMZ"},
+      {"id": 12, "name": "Management to Internal", "source_zone": "Management", "dest_zone": "Internal", "protocol": "*", "ports": [], "action": "allow", "enabled": true, "priority": 5, "description": "Management manages Internal"},
+      {"id": 13, "name": "Block Telnet to DMZ", "source_zone": "Public", "dest_zone": "DMZ", "protocol": "tcp", "ports": [23], "action": "block", "enabled": true, "priority": 0, "description": "Block Telnet"},
+      {"id": 14, "name": "Block RDP to Internal", "source_zone": "Public", "dest_zone": "Internal", "protocol": "tcp", "ports": [3389], "action": "block", "enabled": true, "priority": 0, "description": "Block RDP from internet"}
+    ],
+    "services": [
+      {"id": 1, "name": "Web Server", "zone": "DMZ", "ip": "172.16.0.10", "ports": [80, 443], "protocol": "tcp", "status": "running", "icon": "globe"},
+      {"id": 2, "name": "Mail Server", "zone": "DMZ", "ip": "172.16.0.20", "ports": [25, 587, 465, 993, 995], "protocol": "tcp", "status": "running", "icon": "mail"},
+      {"id": 3, "name": "DNS Server", "zone": "DMZ", "ip": "172.16.0.30", "ports": [53], "protocol": "udp", "status": "running", "icon": "server"},
+      {"id": 4, "name": "Database", "zone": "Internal", "ip": "192.168.1.50", "ports": [3306, 5432], "protocol": "tcp", "status": "running", "icon": "database"},
+      {"id": 5, "name": "File Server", "zone": "Internal", "ip": "192.168.1.60", "ports": [445, 139], "protocol": "tcp", "status": "running", "icon": "folder"},
+      {"id": 6, "name": "Admin Console", "zone": "Management", "ip": "192.168.1.1", "ports": [22, 443], "protocol": "tcp", "status": "running", "icon": "terminal"},
+      {"id": 7, "name": "Log Collector", "zone": "Management", "ip": "192.168.1.2", "ports": [514, 1514], "protocol": "tcp", "status": "running", "icon": "activity"},
+      {"id": 8, "name": "Load Balancer", "zone": "DMZ", "ip": "172.16.0.5", "ports": [80, 443, 8080], "protocol": "tcp", "status": "running", "icon": "shuffle"}
+    ]
+  }
+}

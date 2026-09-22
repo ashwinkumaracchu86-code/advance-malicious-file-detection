@@ -1,0 +1,6 @@
+tuple1=(1,2,3,4,7,89,)
+print("enter the element to tuple:\n")
+for i in range(len(tuple)):
+    print(tuple1[i])
+find=int(input("enter the element to serch tuple"))
+    

@@ -4,8 +4,7 @@ import {
   FiUsers, FiPlus, FiEdit2, FiTrash2, FiShield, FiUser, FiSearch,
   FiRefreshCw, FiCheckCircle, FiXCircle, FiAlertTriangle, FiX
 } from 'react-icons/fi';
-
-const API_BASE = '';
+import { API_BASE } from '../config';
 
 function Modal({ isOpen, onClose, title, children }) {
   if (!isOpen) return null;

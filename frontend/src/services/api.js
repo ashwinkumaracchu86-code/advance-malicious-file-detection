@@ -1,6 +1,7 @@
 import axios from 'axios';
+import { API_BASE } from '../config';
 
-const API_BASE = '';
+const LOGIN_PATH = `${import.meta.env.BASE_URL || '/'}login`;
 
 const api = axios.create({
   baseURL: API_BASE,
@@ -43,7 +44,7 @@ api.interceptors.response.use(
         localStorage.removeItem('token');
         localStorage.removeItem('refreshToken');
         localStorage.removeItem('user');
-        window.location.href = '/login';
+        window.location.href = LOGIN_PATH;
         return Promise.reject(error);
       }
 
@@ -80,7 +81,7 @@ api.interceptors.response.use(
         localStorage.removeItem('token');
         localStorage.removeItem('refreshToken');
         localStorage.removeItem('user');
-        window.location.href = '/login';
+        window.location.href = LOGIN_PATH;
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

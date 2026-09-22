@@ -4,8 +4,7 @@ import {
   FiLock, FiPlus, FiTrash2, FiCopy, FiEye, FiEyeOff,
   FiClock, FiCheckCircle, FiRefreshCw, FiShield,
 } from 'react-icons/fi';
-
-const API_BASE = '';
+import { API_BASE } from '../config';
 
 export default function ApiKeysPage() {
   const [apiKeys, setApiKeys] = useState([]);

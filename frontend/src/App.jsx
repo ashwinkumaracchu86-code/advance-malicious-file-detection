@@ -124,7 +124,7 @@ export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <Router>
+        <Router basename={import.meta.env.BASE_URL}>
         <Toaster
           position="top-right"
           toastOptions={{

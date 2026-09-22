@@ -4,8 +4,7 @@ import {
   FiServer, FiDownload, FiUpload, FiClock, FiCheckCircle,
   FiAlertTriangle, FiRefreshCw, FiTrash2, FiMonitor,
 } from 'react-icons/fi';
-
-const API_BASE = '';
+import { API_BASE } from '../config';
 
 export default function BackupPage() {
   const [backups, setBackups] = useState([]);

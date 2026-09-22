@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from ..database import get_db
@@ -15,6 +17,8 @@ from ..security.auth import (
     USER_ROLE,
 )
 from ..security.middleware import login_tracker
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -109,36 +113,48 @@ def refresh_token(token_data: TokenRefresh, db: Session = Depends(get_db)):
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-def register(user_data: UserCreate, db: Session = Depends(get_db)):
+def register(user_data: UserCreate, req: Request, db: Session = Depends(get_db)):
     """Register a new user with password strength validation. Always creates USER role."""
-    password_errors = validate_password_strength(user_data.password)
-    if password_errors:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"message": "Password does not meet security requirements", "errors": password_errors},
+    try:
+        password_errors = validate_password_strength(user_data.password)
+        if password_errors:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"message": "Password does not meet security requirements", "errors": password_errors},
+            )
+
+        existing = db.query(User).filter(
+            (User.username == user_data.username) | (User.email == user_data.email)
+        ).first()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username or email already registered",
+            )
+
+        hashed = get_password_hash(user_data.password)
+        logger.info(f"Password hashed OK (prefix={hashed[:20]})")
+
+        user = User(
+            username=user_data.username,
+            email=user_data.email,
+            hashed_password=hashed,
+            role=USER_ROLE,
+            is_admin=False,
         )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
 
-    existing = db.query(User).filter(
-        (User.username == user_data.username) | (User.email == user_data.email)
-    ).first()
-    if existing:
+        return UserResponse.model_validate(user)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Register failed: {type(e).__name__}: {e}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Username or email already registered",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Registration failed: {type(e).__name__}: {str(e)}",
         )
-
-    user = User(
-        username=user_data.username,
-        email=user_data.email,
-        hashed_password=get_password_hash(user_data.password),
-        role=USER_ROLE,
-        is_admin=False,
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-
-    return UserResponse.model_validate(user)
 
 
 @router.get("/me", response_model=UserResponse)

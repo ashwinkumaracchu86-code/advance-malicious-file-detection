@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 ALLOWED_ORIGINS = os.getenv(
     "ALLOWED_ORIGINS",
-    "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173"
+    "https://ashwinkumaracchu86-code.github.io,http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173"
 ).split(",")
 
 MAX_UPLOAD_SIZE_MB = int(os.getenv("MAX_UPLOAD_SIZE_MB", "50"))

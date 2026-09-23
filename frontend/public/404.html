@@ -7,12 +7,11 @@
       (function () {
         var base = '/advance-malicious-file-detection';
         var path = window.location.pathname;
-        var i = path.indexOf(base);
-        var rest = i >= 0 ? path.slice(i + base.length) : path;
+        var rest = path.indexOf(base) === 0 ? path.slice(base.length) : path;
         if (!rest || rest === '/') {
           rest = '/';
         }
-        window.location.replace(base + rest + window.location.search + window.location.hash);
+        window.location.replace(base + '/?p=' + encodeURIComponent(rest) + window.location.hash);
       })();
     </script>
   </head>

@@ -205,7 +205,7 @@ export default function LoginPage() {
         </div>
         <div className="w-full max-w-md relative z-10">
           <div className="text-center mb-8">
-            <img src="/logo.svg" alt="MFDS Logo" className="w-16 h-16 mx-auto mb-4" />
+            <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="MFDS Logo" className="w-16 h-16 mx-auto mb-4" />
             <h1 className="text-3xl font-bold text-white tracking-tight">MFDS</h1>
             <p className="text-slate-400 text-sm mt-1">Advanced Malicious File Detection System</p>
           </div>
@@ -250,7 +250,7 @@ export default function LoginPage() {
 
       <div className="w-full max-w-md relative z-10">
         <div className="text-center mb-8">
-          <img src="/logo.svg" alt="MFDS Logo" className="w-16 h-16 mx-auto mb-4" />
+          <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="MFDS Logo" className="w-16 h-16 mx-auto mb-4" />
           <h1 className="text-3xl font-bold text-white tracking-tight">MFDS</h1>
           <p className="text-slate-400 text-sm mt-1">Advanced Malicious File Detection System</p>
         </div>
@@ -420,3 +420,4 @@ export default function LoginPage() {
     </div>
   );
 }
+

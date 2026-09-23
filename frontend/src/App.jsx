@@ -120,11 +120,13 @@ function AppRoutes() {
   );
 }
 
+const routerBasename = import.meta.env.BASE_URL.replace(/\/+$/, '') || '/';
+
 export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <Router basename={import.meta.env.BASE_URL}>
+        <Router basename={routerBasename}>
         <Toaster
           position="top-right"
           toastOptions={{

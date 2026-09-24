@@ -32,9 +32,13 @@ import {
 const REFRESH_INTERVAL = 10000;
 
 const RISK_COLORS = {
+  safe: '#22c55e',
   low: '#22c55e',
+  low_risk: '#22c55e',
   medium: '#f59e0b',
+  suspicious: '#f59e0b',
   high: '#ef4444',
+  malicious: '#ef4444',
   critical: '#dc2626',
 };
 
@@ -199,7 +203,12 @@ export default function EmailSecurityDashboard() {
         value: val,
       }));
     }
-    return [];
+    return [
+      { name: 'safe', value: stats?.safe ?? 0 },
+      { name: 'suspicious', value: stats?.suspicious ?? 0 },
+      { name: 'malicious', value: stats?.malicious ?? 0 },
+      { name: 'critical', value: stats?.critical ?? 0 },
+    ].filter((d) => d.value > 0);
   })();
 
   const topDomains = (() => {

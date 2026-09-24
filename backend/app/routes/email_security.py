@@ -1,9 +1,6 @@
-import os
 import json
 import uuid
 import logging
-import tempfile
-import hashlib
 from typing import List, Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, WebSocket, WebSocketDisconnect
@@ -17,13 +14,14 @@ from ..models.email_models import (
     EmailDetection, EmailAlert, EmailQuarantine, EmailScanEvent,
     EmailMonitoringConfig,
 )
-from ..security.auth import get_current_user
+from ..security.auth import get_current_user, verify_token
+from ..security.encryption import encrypt_value, decrypt_value
 from ..services.email_monitor_service import (
     parse_eml_content, analyze_sender, analyze_subject, analyze_body,
+    analyze_attachment, get_auth_results, test_connection,
     email_monitor,
 )
 from ..services.url_scanner import extract_and_analyze_urls, get_url_summary
-from ..services.archive_analyzer import analyze_archive
 from ..services.email_risk_engine import calculate_email_risk_score
 
 logger = logging.getLogger(__name__)
@@ -37,7 +35,7 @@ class MonitoringConfigRequest(BaseModel):
     imap_port: int = 993
     use_ssl: bool = True
     username: str
-    password: str
+    password: str = ""
     polling_interval_seconds: int = 60
     folders_to_monitor: List[str] = ["INBOX"]
     max_attachment_size_mb: int = 25
@@ -70,63 +68,6 @@ def _create_alert(db, email_id, user_id, alert_type, severity, title, message):
     ))
 
 
-def _analyze_attachment(att):
-    data = att.get("data", b"")
-    filename = att.get("filename", "unnamed")
-    ext = os.path.splitext(filename)[1].lower()
-    md5 = hashlib.md5(data).hexdigest()
-    sha1 = hashlib.sha1(data).hexdigest()
-    sha256 = hashlib.sha256(data).hexdigest()
-    reasons = []
-    score = 0.0
-
-    if ext in DANGEROUS_EXT:
-        reasons.append(f"Dangerous extension: {ext}")
-        score += 30
-
-    parts = filename.split('.')
-    if len(parts) > 2:
-        reasons.append(f"Double extension: {filename}")
-        score += 25
-
-    if ext in ('.zip', '.tar', '.tgz', '.rar', '.7z'):
-        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
-            tmp.write(data)
-            tmp_path = tmp.name
-        try:
-            archive_result = analyze_archive(tmp_path)
-            if archive_result.get("threats_found", 0) > 0:
-                reasons.append(f"Archive contains {archive_result['threats_found']} suspicious file(s)")
-                score += archive_result.get("risk_score", 0) * 0.3
-            if archive_result.get("is_password_protected"):
-                reasons.append("Password-protected archive")
-                score += 15
-        except Exception:
-            pass
-        finally:
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
-
-    score = min(100.0, score)
-    classification = "safe"
-    if score >= 60:
-        classification = "malicious"
-    elif score >= 30:
-        classification = "suspicious"
-    elif score >= 15:
-        classification = "low_risk"
-
-    return {
-        "filename": filename, "content_type": att.get("content_type", ""),
-        "size": att.get("size", 0), "md5": md5, "sha1": sha1, "sha256": sha256,
-        "extension": ext, "risk_score": round(score, 2), "classification": classification,
-        "is_dangerous_extension": ext in DANGEROUS_EXT, "is_double_extension": len(parts) > 2,
-        "detection_reasons": reasons, "reasons": reasons,
-    }
-
-
 @router.post("/scan")
 async def scan_email_file(
     file: UploadFile = File(...),
@@ -145,13 +86,14 @@ async def scan_email_file(
     url_analyses = extract_and_analyze_urls(parsed["body_text"], parsed["body_html"])
     url_summary = get_url_summary(url_analyses)
 
-    attachment_analyses = [_analyze_attachment(att) for att in parsed["attachments"]]
+    attachment_analyses = [analyze_attachment(att, 25) for att in parsed["attachments"]]
     risk_result = calculate_email_risk_score(
         sender_analysis=sender_result, subject_analysis=subject_result,
         body_analysis=body_result, url_analyses=url_analyses,
         attachment_analyses=attachment_analyses,
     )
 
+    auth_results = get_auth_results(parsed["headers"])
     should_quarantine = risk_result["risk_score"] >= 70.0
     email_record = EmailRecord(
         message_id=parsed["message_id"] or str(uuid.uuid4()),
@@ -169,6 +111,8 @@ async def scan_email_file(
         total_attachments=len(attachment_analyses),
         threat_count=sum(1 for a in attachment_analyses if a.get("classification") in ("malicious", "suspicious")),
         url_count=url_summary["total_urls"],
+        spf=auth_results.get("spf"), dkim=auth_results.get("dkim"),
+        dmarc=auth_results.get("dmarc"), scan_source="upload",
     )
     db.add(email_record)
     db.flush()
@@ -182,10 +126,15 @@ async def scan_email_file(
             content_type=att_analysis.get("content_type", ""), file_size=att_analysis.get("size", 0),
             md5=att_analysis.get("md5", ""), sha1=att_analysis.get("sha1", ""),
             sha256=att_analysis.get("sha256", ""), extension=att_analysis.get("extension", ""),
+            detected_mime=att_analysis.get("detected_mime", ""),
+            entropy=att_analysis.get("entropy", 0.0),
             risk_score=att_analysis.get("risk_score", 0), classification=att_analysis.get("classification", "safe"),
             is_dangerous_extension=att_analysis.get("is_dangerous_extension", False),
             is_double_extension=att_analysis.get("is_double_extension", False),
-            detection_reasons=json.dumps(att_analysis.get("reasons", []), default=str),
+            is_mime_mismatch=att_analysis.get("is_mime_mismatch", False),
+            clamav_result=att_analysis.get("clamav_result"),
+            clamav_virus_name=att_analysis.get("clamav_virus_name"),
+            detection_reasons=json.dumps(att_analysis.get("detection_reasons") or att_analysis.get("reasons") or [], default=str),
         ))
 
     for ua in url_analyses:
@@ -246,22 +195,73 @@ async def scan_email_file(
 @router.get("/emails")
 def list_emails(skip: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=200),
     classification: Optional[str] = None, sender: Optional[str] = None,
-    search: Optional[str] = None, db: Session = Depends(get_db),
+    recipient: Optional[str] = None, message_id: Optional[str] = None,
+    search: Optional[str] = None, spf: Optional[str] = None,
+    dkim: Optional[str] = None, dmarc: Optional[str] = None,
+    is_quarantined: Optional[bool] = None, has_attachments: Optional[bool] = None,
+    min_risk: Optional[float] = None, max_risk: Optional[float] = None,
+    date_from: Optional[str] = None, date_to: Optional[str] = None,
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)):
     query = db.query(EmailRecord).filter(EmailRecord.user_id == current_user.id)
     if classification:
         query = query.filter(EmailRecord.classification == classification)
     if sender:
         query = query.filter(EmailRecord.sender.contains(sender))
+    if recipient:
+        query = query.filter(EmailRecord.recipient.contains(recipient))
+    if message_id:
+        query = query.filter(EmailRecord.message_id.contains(message_id))
+    if spf:
+        query = query.filter(EmailRecord.spf == spf.upper())
+    if dkim:
+        query = query.filter(EmailRecord.dkim == dkim.upper())
+    if dmarc:
+        query = query.filter(EmailRecord.dmarc == dmarc.upper())
+    if is_quarantined is not None:
+        query = query.filter(EmailRecord.is_quarantined == is_quarantined)
+    if has_attachments is not None:
+        if has_attachments:
+            query = query.filter(EmailRecord.total_attachments > 0)
+        else:
+            query = query.filter(EmailRecord.total_attachments == 0)
+    if min_risk is not None:
+        query = query.filter(EmailRecord.risk_score >= min_risk)
+    if max_risk is not None:
+        query = query.filter(EmailRecord.risk_score <= max_risk)
+    if date_from:
+        try:
+            dt = datetime.fromisoformat(date_from)
+            query = query.filter(EmailRecord.scan_date >= dt)
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            dt = datetime.fromisoformat(date_to)
+            query = query.filter(EmailRecord.scan_date <= dt)
+        except ValueError:
+            pass
     if search:
-        query = query.filter((EmailRecord.subject.contains(search)) | (EmailRecord.sender.contains(search)))
+        query = query.filter(
+            (EmailRecord.subject.contains(search)) |
+            (EmailRecord.sender.contains(search)) |
+            (EmailRecord.recipient.contains(search)) |
+            (EmailRecord.message_id.contains(search)) |
+            (EmailRecord.id.in_(
+                db.query(EmailAttachment.email_id).filter(
+                    (EmailAttachment.filename.contains(search)) |
+                    (EmailAttachment.sha256.contains(search))).subquery()
+            )))
     total = query.count()
     emails = query.order_by(desc(EmailRecord.scan_date)).offset(skip).limit(limit).all()
     return {"total": total, "skip": skip, "limit": limit,
         "emails": [{"id": e.id, "sender": e.sender, "sender_domain": e.sender_domain,
-            "subject": e.subject, "risk_score": e.risk_score, "classification": e.classification,
-            "is_quarantined": e.is_quarantined, "total_attachments": e.total_attachments,
-            "threat_count": e.threat_count, "url_count": e.url_count,
+            "recipient": e.recipient, "subject": e.subject, "risk_score": e.risk_score,
+            "classification": e.classification, "is_quarantined": e.is_quarantined,
+            "total_attachments": e.total_attachments, "threat_count": e.threat_count,
+            "url_count": e.url_count,
+            "spf": e.spf, "dkim": e.dkim, "dmarc": e.dmarc,
+            "message_id": e.message_id,
             "scan_date": e.scan_date.isoformat() if e.scan_date else None} for e in emails]}
 
 
@@ -280,7 +280,10 @@ def get_email_detail(email_id: int, db: Session = Depends(get_db),
     return {
         "email": {"id": email_record.id, "sender": email_record.sender,
             "sender_domain": email_record.sender_domain, "recipient": email_record.recipient,
-            "subject": email_record.subject,
+            "subject": email_record.subject, "message_id": email_record.message_id,
+            "reply_to": email_record.reply_to, "return_path": email_record.return_path,
+            "scan_source": email_record.scan_source,
+            "spf": email_record.spf, "dkim": email_record.dkim, "dmarc": email_record.dmarc,
             "date_received": email_record.date_received.isoformat() if email_record.date_received else None,
             "body_text": email_record.body_text, "body_html": email_record.body_html,
             "risk_score": email_record.risk_score, "classification": email_record.classification,
@@ -291,8 +294,11 @@ def get_email_detail(email_id: int, db: Session = Depends(get_db),
         "headers": [{"name": h.header_name, "value": h.header_value} for h in headers],
         "attachments": [{"id": a.id, "filename": a.filename, "content_type": a.content_type,
             "file_size": a.file_size, "md5": a.md5, "sha1": a.sha1, "sha256": a.sha256,
-            "extension": a.extension, "risk_score": a.risk_score, "classification": a.classification,
+            "extension": a.extension, "detected_mime": a.detected_mime, "entropy": a.entropy,
+            "risk_score": a.risk_score, "classification": a.classification,
             "is_dangerous_extension": a.is_dangerous_extension, "is_double_extension": a.is_double_extension,
+            "is_mime_mismatch": a.is_mime_mismatch, "is_quarantined": a.is_quarantined,
+            "quarantine_path": a.quarantine_path,
             "detection_reasons": json.loads(a.detection_reasons) if a.detection_reasons else [],
             "clamav_result": a.clamav_result, "clamav_virus_name": a.clamav_virus_name} for a in attachments],
         "url_analyses": [{"url": u.url, "domain": u.domain, "is_https": u.is_https,
@@ -423,6 +429,57 @@ def quarantine_action(item_id: int, action_req: EmailQuarantineAction,
     return {"status": "success", "action": action_req.action}
 
 
+@router.post("/emails/{email_id}/quarantine")
+def quarantine_email_record(
+    email_id: int, db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)):
+    """Quarantine a scanned email by its EmailRecord id (creates/updates the quarantine row)."""
+    email_record = db.query(EmailRecord).filter(
+        EmailRecord.id == email_id, EmailRecord.user_id == current_user.id).first()
+    if not email_record:
+        raise HTTPException(status_code=404, detail="Email not found")
+    existing = db.query(EmailQuarantine).filter(
+        EmailQuarantine.email_id == email_id,
+        EmailQuarantine.user_id == current_user.id).first()
+    if not existing:
+        existing = EmailQuarantine(
+            email_id=email_record.id, user_id=current_user.id,
+            risk_score=email_record.risk_score,
+            classification=email_record.classification,
+            reason="Manually quarantined by administrator",
+            status="quarantined",
+        )
+        db.add(existing)
+    else:
+        existing.status = "quarantined"
+    email_record.is_quarantined = True
+    db.add(AuditLog(user_id=current_user.id, action="email_quarantine_manual",
+        details=f"Manually quarantined email {email_id}", result="success"))
+    db.commit()
+    return {"status": "success", "action": "quarantine", "email_id": email_id}
+
+
+@router.post("/emails/{email_id}/release")
+def release_email_record(
+    email_id: int, db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)):
+    """Release a quarantined email by its EmailRecord id."""
+    email_record = db.query(EmailRecord).filter(
+        EmailRecord.id == email_id, EmailRecord.user_id == current_user.id).first()
+    if not email_record:
+        raise HTTPException(status_code=404, detail="Email not found")
+    email_record.is_quarantined = False
+    existing = db.query(EmailQuarantine).filter(
+        EmailQuarantine.email_id == email_id,
+        EmailQuarantine.user_id == current_user.id).first()
+    if existing:
+        existing.status = "released"
+    db.add(AuditLog(user_id=current_user.id, action="email_quarantine_released",
+        details=f"Released email {email_id}", result="success"))
+    db.commit()
+    return {"status": "success", "action": "release", "email_id": email_id}
+
+
 @router.get("/events")
 def get_scan_events(limit: int = Query(100, ge=1, le=500), event_type: Optional[str] = None,
     db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -450,20 +507,31 @@ def get_monitoring_config(db: Session = Depends(get_db),
         "max_attachment_size_mb": config.max_attachment_size_mb,
         "auto_quarantine_threshold": config.auto_quarantine_threshold,
         "is_active": config.is_active,
-        "last_check": config.last_check.isoformat() if config.last_check else None}
+        "last_check": config.last_check.isoformat() if config.last_check else None,
+        "last_success_check": config.last_success_check.isoformat() if config.last_success_check else None,
+        "last_error": config.last_error,
+        "connection_status": config.connection_status or "unknown",
+        "last_heartbeat": config.last_heartbeat.isoformat() if config.last_heartbeat else None,
+        "emails_checked": config.emails_checked or 0,
+        "threats_detected": config.threats_detected or 0,
+        "quarantined_attachments": config.quarantined_attachments or 0}
 
 
 @router.post("/monitoring/config")
 def save_monitoring_config(config_req: MonitoringConfigRequest, db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)):
+    if config_req.password and not config_req.password.startswith("enc:"):
+        encrypted = encrypt_value(config_req.password)
+    else:
+        encrypted = config_req.password
     existing = db.query(EmailMonitoringConfig).filter(
         EmailMonitoringConfig.user_id == current_user.id).first()
     if existing:
         for attr in ["provider", "imap_host", "imap_port", "use_ssl", "username",
                       "polling_interval_seconds", "max_attachment_size_mb", "auto_quarantine_threshold"]:
             setattr(existing, attr, getattr(config_req, attr))
-        if config_req.password:
-            existing.password_encrypted = config_req.password
+        if encrypted:
+            existing.password_encrypted = encrypted
         existing.folders_to_monitor = json.dumps(config_req.folders_to_monitor)
         config_record = existing
     else:
@@ -471,20 +539,56 @@ def save_monitoring_config(config_req: MonitoringConfigRequest, db: Session = De
             user_id=current_user.id, provider=config_req.provider,
             imap_host=config_req.imap_host, imap_port=config_req.imap_port,
             use_ssl=config_req.use_ssl, username=config_req.username,
-            password_encrypted=config_req.password,
+            password_encrypted=encrypted,
             polling_interval_seconds=config_req.polling_interval_seconds,
             folders_to_monitor=json.dumps(config_req.folders_to_monitor),
             max_attachment_size_mb=config_req.max_attachment_size_mb,
             auto_quarantine_threshold=config_req.auto_quarantine_threshold)
         db.add(config_record)
     db.commit()
+    # Update in-memory worker state WITHOUT passing a plaintext password.
     email_monitor.update_config(config_record.id, {
         "is_active": config_record.is_active, "imap_host": config_req.imap_host,
         "imap_port": config_req.imap_port, "use_ssl": config_req.use_ssl,
-        "username": config_req.username, "password": config_req.password,
+        "username": config_req.username,
         "folders_to_monitor": json.dumps(config_req.folders_to_monitor),
+        "polling_interval_seconds": config_req.polling_interval_seconds,
+        "max_attachment_size_mb": config_req.max_attachment_size_mb,
+        "auto_quarantine_threshold": config_req.auto_quarantine_threshold,
         "last_uid": config_record.last_uid or 0})
     return {"status": "success", "message": "Monitoring configuration saved"}
+
+
+@router.post("/monitoring/test-connection")
+def test_connection_endpoint(config_req: Optional[MonitoringConfigRequest] = None,
+    db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Perform a REAL IMAP connection test.
+
+    Uses the saved configuration unless an explicit config is provided.
+    Never returns the password.
+    """
+    if config_req is None:
+        config = db.query(EmailMonitoringConfig).filter(
+            EmailMonitoringConfig.user_id == current_user.id).first()
+        if not config:
+            return {"status": "NOT_CONFIGURED", "message": "No monitoring configuration found"}
+        imap_host = config.imap_host
+        imap_port = config.imap_port
+        use_ssl = config.use_ssl
+        username = config.username
+        password = decrypt_value(config.password_encrypted or "")
+        folders = json.loads(config.folders_to_monitor) if config.folders_to_monitor else ["INBOX"]
+    else:
+        imap_host = config_req.imap_host
+        imap_port = config_req.imap_port
+        use_ssl = config_req.use_ssl
+        username = config_req.username
+        password = config_req.password
+        folders = config_req.folders_to_monitor or ["INBOX"]
+
+    result = test_connection(imap_host, imap_port, use_ssl, username, password, folders)
+    label = "CONNECTED" if result.get("status") == "connected" else "FAILED"
+    return {**result, "status": label}
 
 
 @router.post("/monitoring/start")
@@ -494,18 +598,25 @@ def start_monitoring(db: Session = Depends(get_db),
         EmailMonitoringConfig.user_id == current_user.id).first()
     if not config:
         raise HTTPException(status_code=400, detail="No monitoring configuration found")
+    if not config.imap_host or not config.username or not config.password_encrypted:
+        raise HTTPException(status_code=400, detail="Monitoring configuration is incomplete (host, username or password required)")
     config.is_active = True
     db.commit()
+    # Load config into the in-memory worker WITHOUT transferring a clear password.
     email_monitor.update_config(config.id, {
         "is_active": True, "imap_host": config.imap_host, "imap_port": config.imap_port,
         "use_ssl": config.use_ssl, "username": config.username,
         "password": config.password_encrypted,
-        "folders_to_monitor": config.folders_to_monitor, "last_uid": config.last_uid or 0})
+        "folders_to_monitor": config.folders_to_monitor, "last_uid": config.last_uid or 0,
+        "polling_interval_seconds": config.polling_interval_seconds,
+        "max_attachment_size_mb": config.max_attachment_size_mb,
+        "auto_quarantine_threshold": config.auto_quarantine_threshold})
     email_monitor.start()
     db.add(AuditLog(user_id=current_user.id, action="email_monitoring_started",
         details=f"Started monitoring for {config.username}@{config.imap_host}", result="success"))
     db.commit()
-    return {"status": "success", "message": "Email monitoring started"}
+    return {"status": "success", "message": "Email monitoring started",
+        "monitoring_status": "active", "worker_running": email_monitor.is_running()}
 
 
 @router.post("/monitoring/stop")
@@ -520,22 +631,93 @@ def stop_monitoring(db: Session = Depends(get_db),
     db.add(AuditLog(user_id=current_user.id, action="email_monitoring_stopped",
         details="Stopped email monitoring", result="success"))
     db.commit()
-    return {"status": "success", "message": "Email monitoring stopped"}
+    return {"status": "success", "message": "Email monitoring stopped",
+        "monitoring_status": "stopped", "worker_running": email_monitor.is_running()}
 
 
 @router.get("/monitoring/status")
-def get_monitoring_status(current_user: User = Depends(get_current_user)):
-    return {"monitor_running": email_monitor._running,
-        "active_configs": len(email_monitor._configs)}
+def get_monitoring_status(db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)):
+    """Return real monitoring state backed by the worker + persisted heartbeat."""
+    from datetime import timedelta
+    config = db.query(EmailMonitoringConfig).filter(
+        EmailMonitoringConfig.user_id == current_user.id).first()
+    base = {
+        "monitor_running": email_monitor.is_running(),
+        "active_configs": len(email_monitor._configs),
+        "configured": config is not None,
+    }
+    if not config:
+        base.update({
+            "monitoring_status": "NOT_CONFIGURED",
+            "connection_status": "unknown",
+            "worker_running": False,
+            "last_check": None, "last_successful_check": None,
+            "last_error": None, "heartbeat_stale": True,
+            "polling_interval_seconds": None,
+            "emails_checked": 0, "threats_detected": 0, "quarantined_attachments": 0,
+        })
+        return base
+
+    worker_running = email_monitor.is_running()
+    configured_active = bool(config.is_active)
+    connection_status = (config.connection_status or "unknown").lower()
+
+    # heartbeat staleness
+    penalty = 5 * max(10, int(config.polling_interval_seconds or 60))
+    last_hb = config.last_heartbeat
+    heartbeat_stale = True
+    if last_hb is not None:
+        try:
+            heartbeat_stale = (datetime.now(timezone.utc) - last_hb).total_seconds() > penalty
+        except Exception:
+            heartbeat_stale = True
+
+    if connection_status == "connected" and worker_running and not heartbeat_stale:
+        monitoring_status = "active"
+    elif config.is_active and worker_running:
+        monitoring_status = "starting"
+    elif config.is_active:
+        monitoring_status = "error" if connection_status == "error" else "starting"
+    else:
+        monitoring_status = "stopped"
+
+    base.update({
+        "monitoring_status": monitoring_status,
+        "connection_status": connection_status,
+        "worker_running": worker_running,
+        "is_active": configured_active,
+        "last_check": config.last_check.isoformat() if config.last_check else None,
+        "last_successful_check": config.last_success_check.isoformat() if config.last_success_check else None,
+        "last_error": config.last_error,
+        "last_heartbeat": config.last_heartbeat.isoformat() if config.last_heartbeat else None,
+        "heartbeat_stale": heartbeat_stale,
+        "polling_interval_seconds": config.polling_interval_seconds,
+        "username": config.username,
+        "emails_checked": config.emails_checked or 0,
+        "threats_detected": config.threats_detected or 0,
+        "quarantined_attachments": config.quarantined_attachments or 0,
+    })
+    return base
 
 
 @router.websocket("/ws/events")
-async def websocket_events(websocket: WebSocket):
+async def websocket_events(websocket: WebSocket, token: str = Query(None)):
+    """WebSocket endpoint for real-time email security events with token authentication."""
+    if not token:
+        await websocket.close(code=4001, reason="Authentication token required")
+        return
+    payload = verify_token(token, token_type="access")
+    if not payload:
+        await websocket.close(code=4003, reason="Invalid or expired token")
+        return
     await websocket.accept()
     email_monitor.register_ws(websocket)
     try:
         while True:
             data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_json({"type": "pong", "data": {}})
     except WebSocketDisconnect:
         email_monitor.unregister_ws(websocket)
     except Exception:

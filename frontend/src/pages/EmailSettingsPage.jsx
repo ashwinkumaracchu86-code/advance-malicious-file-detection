@@ -95,6 +95,7 @@ export default function EmailSettingsPage() {
     lastCheckTime: null,
     isMonitoring: false,
   })
+  const [isTesting, setIsTesting] = useState(false)
   const [isStartingMonitor, setIsStartingMonitor] = useState(false)
   const [isStoppingMonitor, setIsStoppingMonitor] = useState(false)
   const [errors, setErrors] = useState({})
@@ -266,6 +267,37 @@ export default function EmailSettingsPage() {
     }
   }
 
+  const handleTestConnection = async () => {
+    if (!validate(isConfigured)) {
+      toast.error('Please fix the errors in the form')
+      return
+    }
+    setIsTesting(true)
+    try {
+      const testPayload = {
+        provider: config.provider,
+        imap_host: config.imapHost,
+        imap_port: config.imapPort,
+        use_ssl: config.useSSL,
+        username: config.username,
+        password: config.password || '',
+        folders_to_monitor: config.folders.split(',').map(f => f.trim()).filter(Boolean),
+      }
+      const res = await emailSecurityAPI.testConnection(testPayload)
+      const data = res?.data || res
+      if (data && data.success) {
+        toast.success(`Connection successful (${data.server_response || 'server responded'})`)
+      } else {
+        toast.error(data?.message || 'Connection failed')
+      }
+    } catch (err) {
+      const msg = err?.response?.data?.detail || err?.message || 'Connection test failed'
+      toast.error(msg)
+    } finally {
+      setIsTesting(false)
+    }
+  }
+
   const handleStartMonitoring = async () => {
     if (!validate(isConfigured)) {
       toast.error('Please fill in all required fields')
@@ -403,6 +435,18 @@ export default function EmailSettingsPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={handleTestConnection}
+            disabled={isTesting}
+            className="flex items-center gap-2 px-4 py-2.5 bg-dark-700 hover:bg-dark-600 disabled:bg-dark-700/60 disabled:cursor-not-allowed text-dark-100 rounded-lg text-sm font-medium transition-colors"
+          >
+            {isTesting ? (
+              <FiRefreshCw className="w-4 h-4 animate-spin" />
+            ) : (
+              <FiMail className="w-4 h-4" />
+            )}
+            {isTesting ? 'Testing...' : 'Test Connection'}
+          </button>
           <button
             onClick={handleStartMonitoring}
             disabled={isStartingMonitor || status.isMonitoring}

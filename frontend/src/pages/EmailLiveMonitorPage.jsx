@@ -157,7 +157,12 @@ export default function EmailLiveMonitorPage() {
   const fetchStatus = useCallback(async () => {
     try {
       const res = await emailSecurityAPI.getMonitoringStatus();
-      const isMonitoring = res.data?.monitoring ?? res.data?.active ?? false;
+      const status = res.data?.monitoring_status || '';
+      const isMonitoring =
+        res.data?.monitor_running ||
+        res.data?.is_active ||
+        status === 'active' ||
+        status === 'starting';
       setMonitoring(isMonitoring);
       setConnected(true);
     } catch (err) {

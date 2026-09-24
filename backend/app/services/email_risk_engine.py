@@ -43,11 +43,22 @@ def calculate_email_risk_score(
             score += url_score * 0.10
             for r in ua.get("reasons", []):
                 reasons.append({"category": "url", "description": r, "points": 10})
+    has_phishing_url = any(ua.get("is_phishing") for ua in url_analyses)
+    has_suspicious_url = any(ua.get("is_suspicious") for ua in url_analyses)
+    if has_phishing_url:
+        score += 25
+        reasons.append({"category": "url",
+                        "description": "Email contains a detected phishing URL", "points": 25})
+    elif has_suspicious_url:
+        score += 15
+        reasons.append({"category": "url",
+                        "description": "Email contains a suspicious URL", "points": 15})
 
     max_attachment_score = 0
     total_attachment_threats = 0
     for aa in attachment_analyses:
         att_score = aa.get("risk_score", 0)
+        att_class = (aa.get("classification") or "safe").lower()
         max_attachment_score = max(max_attachment_score, att_score)
         if att_score > 0:
             score += att_score * 0.25
@@ -57,6 +68,18 @@ def calculate_email_risk_score(
                     reasons.append({"category": "attachment", "description": r, "points": 15})
                 elif isinstance(r, dict):
                     reasons.append({"category": "attachment", "description": r.get("reason", str(r)), "points": 15})
+        if att_class in ("malicious", "critical"):
+            score += 35
+            total_attachment_threats += 1
+            reasons.append({"category": "attachment",
+                            "description": f"Attachment classified as {att_class}: {aa.get('filename', 'unknown')}",
+                            "points": 35})
+        elif att_class == "suspicious":
+            score += 20
+            total_attachment_threats += 1
+            reasons.append({"category": "attachment",
+                            "description": f"Attachment classified as suspicious: {aa.get('filename', 'unknown')}",
+                            "points": 20})
 
     if header_analysis:
         header_score = header_analysis.get("score", 0)

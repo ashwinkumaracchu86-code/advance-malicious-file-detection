@@ -27,7 +27,6 @@ import EmailLiveMonitorPage from './pages/EmailLiveMonitorPage';
 import EmailSettingsPage from './pages/EmailSettingsPage';
 import EmailDetailPage from './pages/EmailDetailPage';
 import EmailQuarantinePage from './pages/EmailQuarantinePage';
-import UserManagementPage from './pages/UserManagementPage';
 import WebhooksPage from './pages/WebhooksPage';
 import BackupPage from './pages/BackupPage';
 import ApiKeysPage from './pages/ApiKeysPage';
@@ -113,7 +112,6 @@ function AppRoutes() {
         <Route path="email-settings" element={<EmailSettingsPage />} />
         <Route path="email-security/email/:id" element={<EmailDetailPage />} />
         <Route path="email-quarantine" element={<EmailQuarantinePage />} />
-        <Route path="users" element={<UserManagementPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>

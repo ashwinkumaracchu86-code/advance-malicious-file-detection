@@ -236,7 +236,7 @@ export default function EmailDetailPage() {
   const handleQuarantine = async () => {
     try {
       setActionLoading('quarantine');
-      await emailSecurityAPI.quarantineAction(id, { action: 'quarantine' });
+      await emailSecurityAPI.quarantineEmail(id);
       toast.success('Email quarantined successfully');
       setEmail((prev) => ({ ...prev, is_quarantined: true, quarantine_status: 'quarantined' }));
     } catch (err) {
@@ -250,7 +250,7 @@ export default function EmailDetailPage() {
   const handleRelease = async () => {
     try {
       setActionLoading('release');
-      await emailSecurityAPI.quarantineAction(id, { action: 'release' });
+      await emailSecurityAPI.releaseEmail(id);
       toast.success('Email released successfully');
       setEmail((prev) => ({ ...prev, is_quarantined: false, quarantine_status: 'released' }));
     } catch (err) {

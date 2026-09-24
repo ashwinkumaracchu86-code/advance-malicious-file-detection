@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import {
   FiGrid, FiUpload, FiClock, FiShield, FiCpu, FiFolder, FiFileText,
   FiActivity, FiSettings, FiChevronLeft, FiChevronRight, FiLogOut,
-  FiUser, FiX, FiShieldOff, FiUsers,
+  FiUser, FiX, FiShieldOff,
   FiMonitor, FiCalendar, FiDownload, FiHash, FiTrendingUp, FiServer, FiMail,
   FiLink, FiLock, FiDatabase,
 } from 'react-icons/fi';
@@ -66,7 +66,6 @@ const NAV_SECTIONS = [
   {
     title: 'System',
     items: [
-      { path: '/users', label: 'User Management', icon: FiUsers },
       { path: '/system-health', label: 'System Health', icon: FiMonitor },
       { path: '/security-logs', label: 'Security Logs', icon: FiActivity },
       { path: '/settings', label: 'Settings', icon: FiSettings },

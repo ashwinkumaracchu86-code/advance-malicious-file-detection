@@ -31,7 +31,6 @@ const pageTitles = {
   '/system-health': 'System Health',
   '/security-logs': 'Security Logs',
   '/settings': 'Settings',
-  '/users': 'User Management',
   '/profile': 'Profile',
 };
 

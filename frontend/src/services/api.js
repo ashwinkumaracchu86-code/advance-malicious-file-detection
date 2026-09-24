@@ -240,9 +240,12 @@ export const emailSecurityAPI = {
   markAllAlertsRead: () => api.post('/email-security/alerts/read-all'),
   getQuarantine: (params) => api.get('/email-security/quarantine', { params }),
   quarantineAction: (id, data) => api.post(`/email-security/quarantine/${id}/action`, data),
+  quarantineEmail: (id) => api.post(`/email-security/emails/${id}/quarantine`),
+  releaseEmail: (id) => api.post(`/email-security/emails/${id}/release`),
   getEvents: (params) => api.get('/email-security/events', { params }),
   getMonitoringConfig: () => api.get('/email-security/monitoring/config'),
   saveMonitoringConfig: (data) => api.post('/email-security/monitoring/config', data),
+  testConnection: (data) => api.post('/email-security/monitoring/test-connection', data),
   startMonitoring: () => api.post('/email-security/monitoring/start'),
   stopMonitoring: () => api.post('/email-security/monitoring/stop'),
   getMonitoringStatus: () => api.get('/email-security/monitoring/status'),
@@ -303,12 +306,6 @@ export const sandboxAPI = {
   deleteJob: (id) => api.delete(`/sandbox/jobs/${id}`),
 };
 
-export const adminUsersAPI = {
-  list: (params) => api.get('/admin/users', { params }),
-  get: (id) => api.get(`/admin/users/${id}`),
-  create: (data) => api.post('/admin/users', data),
-  update: (id, data) => api.put(`/admin/users/${id}`, data),
-  delete: (id) => api.delete(`/admin/users/${id}`),
-};
+
 
 export default api;

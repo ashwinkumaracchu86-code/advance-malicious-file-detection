@@ -66,7 +66,7 @@ export default function EmailQuarantinePage() {
       setError(null);
 
       const response = await emailSecurityAPI.getQuarantine({ limit: 50 });
-      setEmails(response.data?.emails || response.emails || []);
+      setEmails(response.data?.quarantine || response.quarantine || []);
     } catch (err) {
       console.error('Failed to fetch quarantine data:', err);
       setError(err.message || 'Failed to load quarantined emails');
@@ -120,8 +120,8 @@ export default function EmailQuarantinePage() {
     }
   };
 
-  const handleView = (id) => {
-    navigate(`/email-security/email/${id}`);
+  const handleView = (id, emailId) => {
+    navigate(`/email-security/email/${emailId || id}`);
   };
 
   const filteredEmails = emails.filter((email) => {
@@ -408,7 +408,7 @@ export default function EmailQuarantinePage() {
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-end gap-1">
                           <button
-                            onClick={() => handleView(email.id)}
+                            onClick={() => handleView(email.id, email.email_id)}
                             className="p-2 text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors"
                             title="View Details"
                           >

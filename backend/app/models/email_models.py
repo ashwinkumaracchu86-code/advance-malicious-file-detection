@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Float, Boolean, ForeignKey, Text, Index
+from sqlalchemy import Column, Integer, String, DateTime, Float, Boolean, ForeignKey, Text, Index, UniqueConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from ..database import Base
@@ -33,6 +33,10 @@ class EmailRecord(Base):
     url_count = Column(Integer, default=0)
     spam_score = Column(Float, default=0.0)
     phishing_score = Column(Float, default=0.0)
+    spf = Column(String(20))
+    dkim = Column(String(20))
+    dmarc = Column(String(20))
+    scan_source = Column(String(50), default="imap")
 
     user = relationship("User", backref="email_records")
     headers = relationship("EmailHeader", back_populates="email", cascade="all, delete-orphan")
@@ -201,7 +205,32 @@ class EmailMonitoringConfig(Base):
     folders_to_monitor = Column(Text, default='["INBOX"]')
     max_attachment_size_mb = Column(Integer, default=25)
     auto_quarantine_threshold = Column(Float, default=70.0)
+    last_success_check = Column(DateTime)
+    last_error = Column(Text)
+    connection_status = Column(String(20), default="unknown")
+    last_heartbeat = Column(DateTime)
+    emails_checked = Column(Integer, default=0)
+    threats_detected = Column(Integer, default=0)
+    quarantined_attachments = Column(Integer, default=0)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     user = relationship("User", backref="email_monitoring_configs")
+
+
+class EmailProcessedUID(Base):
+    """Persistent record of processed IMAP messages (UID) to prevent duplicate processing across restarts."""
+
+    __tablename__ = "email_processed_uids"
+
+    id = Column(Integer, primary_key=True, index=True)
+    config_id = Column(Integer, ForeignKey("email_monitoring_config.id"), nullable=False)
+    folder = Column(String(100), nullable=False)
+    uid = Column(Integer, nullable=False)
+    message_id = Column(String(255))
+    processed_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        UniqueConstraint("config_id", "folder", "uid", name="uq_config_folder_uid"),
+        Index("idx_processed_uid", "config_id", "folder", "uid"),
+    )

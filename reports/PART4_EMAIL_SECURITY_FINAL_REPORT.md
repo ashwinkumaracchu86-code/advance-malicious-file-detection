@@ -52,6 +52,53 @@ worker/monitoring endpoints are verified at the API/contract level and the
 production API base (`-3.onrender.com`) is verified live. Render worker
 runtime behavior documented but not live-verified (see Q).
 
+## D2. Post-Report Bug-Fix Round (2026-09-24)
+
+Follow-up fixes applied, tested, and deployed:
+
+Fixes (frontend + backend, Email Security only):
+- `EmailQuarantinePage.jsx` — reads the correct response key
+  (`data.quarantine`, `quarantine`, `[]`) and views a record by
+  `email.email_id`; View button passes `email.id, email.email_id`.
+- `EmailLiveMonitorPage.jsx` — monitoring status parse accepts
+  `monitor_running` / `is_active` / `active` / `starting`.
+- `api.js` — added `quarantineEmail(emailId)` and `releaseEmail(emailId)`.
+- `EmailDetailPage.jsx` — Quarantine/Release handlers now call the real
+  per-email endpoints.
+- `EmailSecurityDashboard.jsx` — `RISK_COLORS` extended (safe/low/low_risk/
+  medium/suspicious/high/malicious/critical); risk pie falls back to flat
+  counts when no distribution map is present.
+- `email_security.py` — fixed `verify_token` import; WS `/ws/events` now
+  requires a valid access token (patterns mirror realtime.py); added
+  `POST /email-security/emails/{email_id}/quarantine` and
+  `POST /email-security/emails/{email_id}/release`.
+- `email_monitor_service.py` — `analyze_attachment` now detects the EICAR
+  standard antivirus test signature directly (risk 100, classification
+  malicious) and reclassifies dangerous-extension / suspicious-mime
+  attachments as `suspicious` instead of collapsing them to `safe`.
+- `email_risk_engine.py` — a `malicious` attachment adds +35, `suspicious`
+  +20; a phishing URL +25, suspicious URL +15 (weighted from real analysis,
+  no fabricated data).
+
+Regression tests:
+- `backend/test_email_security.py` (new, standalone runner, 12 scenarios,
+  36 assertions) — **36/36 PASS** (incl. EICAR detection, exe/HTML/.bat
+  flags, suspicious URL, mixed-email risk, UID uniqueness).
+- `backend/test_analyzers.py` (existing) — **ALL TESTS PASSED**.
+- `backend/test_risk_engine.py` (existing) — **ALL TESTS PASSED**.
+- Frontend `npm run build` — **PASS** (932 modules transformed).
+
+Deployment (2026-09-24):
+- Branch `main` pushed to `origin/main` (commit `0907572`);
+  backend Dockerfile intact (restored from worktree deletion).
+- GitHub Pages branch updated from fresh `dist/` (index
+  `index-DDmzr5T9.js` / `index-jqG4NbLO.css` verified live with HTTP 200)
+  and force-pushed to `gh-pages` (commit `547572e`).
+- Render backend deploy from `main` was still pending at final check
+  (~1h15m after push): `origin/main` had the new commit but live
+  `/openapi.json` had not yet listed the new email endpoints — likely a
+  Render build/deploy delay; re-verify after the build completes.
+
 ## E — Files Changed (Visible in `git status`, Email Security only)
 
 ```
@@ -256,11 +303,22 @@ confirmed from the repo alone training. Live mailbox E2E:
 
 **READY** — for all items verifiable from this repository.
 
+**DEPLOYED (2026-09-24):**
+- Frontend (GitHub Pages):
+  `https://ashwinkumaracchu86-code.github.io/advance-malicious-file-detection/`
+  — verified live (HTTP 200, new hashed assets).
+- Email Monitor route:
+  `https://ashwinkumaracchu86-code.github.io/advance-malicious-file-detection/email-monitor`
+- Backend (Render):
+  `https://advance-malicious-file-detection-3.onrender.com` — `/health`
+  healthy; new per-email quarantine/release + WS-auth endpoints pending
+  Render rebuild at final check.
+
 **NOT TESTED (honest)** — live Gmail IMAP end-to-end monitoring (no valid
 credentials available); Render Background Worker runtime state (dashboard
-review pending). Those remain the only deployment-dependent checks outside
-repo scope, so this build is READY to deploy and must be re-verified after
-valid Gmail credentials + Render dashboard access.
+review pending); final Render deploy propagation for the new email
+endpoints. Those remain the only deployment-dependent checks outside
+repo scope.
 
 ---
 

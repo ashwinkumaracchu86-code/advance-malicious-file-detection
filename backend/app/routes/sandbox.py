@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..security.auth import get_current_user
+from ..security.ownership import job_owned_or_forbidden
 from ..models.models import User
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,7 @@ def save_jobs(data):
 @router.get("/jobs")
 def list_jobs(current_user: User = Depends(get_current_user)):
     data = load_jobs()
-    jobs = data.get("jobs", [])
+    jobs = [j for j in data.get("jobs", []) if j.get("user_id") == current_user.id]
     jobs.sort(key=lambda x: x.get("created_at", ""), reverse=True)
     return {"jobs": jobs}
 
@@ -120,16 +121,15 @@ def get_job(job_id: str, current_user: User = Depends(get_current_user)):
     data = load_jobs()
     for job in data.get("jobs", []):
         if job["id"] == job_id:
-            return job
-    raise HTTPException(status_code=404, detail="Job not found")
+            return job_owned_or_forbidden(job, current_user)
+    raise HTTPException(status_code=403, detail="You do not have permission to access this resource.")
 
 
 @router.delete("/jobs/{job_id}")
 def delete_job(job_id: str, current_user: User = Depends(get_current_user)):
     data = load_jobs()
     job = next((j for j in data["jobs"] if j["id"] == job_id), None)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+    job_owned_or_forbidden(job, current_user)
 
     stored_path = os.path.join(SANDBOX_DIR, job.get("stored_filename", ""))
     if os.path.exists(stored_path):

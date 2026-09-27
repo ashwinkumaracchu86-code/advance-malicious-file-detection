@@ -31,21 +31,22 @@ async def websocket_endpoint(ws: WebSocket, token: str = Query(None)):
         await ws.close(code=4003, reason="Invalid token payload")
         return
 
-    await manager.connect(ws)
+    user_id = int(user_id)
+    await manager.connect(ws, user_id)
     try:
         await ws.send_json({
             "type": "connected",
-            "data": {"message": "Connected to real-time scan feed", "user_id": int(user_id)},
+            "data": {"message": "Connected to real-time scan feed", "user_id": user_id},
         })
         while True:
             data = await ws.receive_text()
             if data == "ping":
                 await ws.send_json({"type": "pong", "data": {}})
     except WebSocketDisconnect:
-        await manager.disconnect(ws)
+        await manager.disconnect(ws, user_id)
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
-        await manager.disconnect(ws)
+        await manager.disconnect(ws, user_id)
 
 
 @router.post("/realtime/auto-scan/start")
@@ -114,9 +115,9 @@ async def get_realtime_notifications(
     current_user: User = Depends(get_current_user),
 ):
     """Get all notifications from both antivirus and folder monitor."""
-    from ..routes.antivirus import _notification_queue
+    from ..routes.antivirus import filter_notifications_for_user
     monitor_notifs = folder_monitor.get_monitor_notifications()
     return {
-        "notifications": _notification_queue[:50],
+        "notifications": filter_notifications_for_user(current_user.id)[:50],
         "monitor_notifications": monitor_notifs[:50],
     }

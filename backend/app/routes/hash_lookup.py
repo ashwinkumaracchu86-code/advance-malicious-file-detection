@@ -94,6 +94,7 @@ def lookup_hashes(
         found_locally = False
 
         file_record = db.query(FileModel).filter(
+            FileModel.uploaded_by == current_user.id,
             (FileModel.md5 == hash_str) |
             (FileModel.sha1 == hash_str) |
             (FileModel.sha256 == hash_str)
@@ -101,7 +102,10 @@ def lookup_hashes(
 
         if file_record:
             found_locally = True
-            scan = db.query(Scan).filter(Scan.file_id == file_record.id).order_by(Scan.scan_date.desc()).first()
+            scan = db.query(Scan).filter(
+                Scan.file_id == file_record.id,
+                Scan.user_id == current_user.id,
+            ).order_by(Scan.scan_date.desc()).first()
             if scan:
                 local_scan = {
                     "scan_id": scan.id,
@@ -150,7 +154,7 @@ def get_recent_lookups(
     """Get recent hash lookup audit logs."""
     logs = (
         db.query(AuditLog)
-        .filter(AuditLog.action == "hash_lookup")
+        .filter(AuditLog.action == "hash_lookup", AuditLog.user_id == current_user.id)
         .order_by(AuditLog.timestamp.desc())
         .limit(limit)
         .all()

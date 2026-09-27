@@ -9,12 +9,13 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger(__name__)
 
 
-def export_scans_csv(db: Session, limit: int = 1000) -> str:
+def export_scans_csv(db: Session, limit: int = 1000, user_id: int = None) -> str:
     """Export scan results as CSV string."""
     from ..models.models import Scan, File as FileModel
 
     scans = (
         db.query(Scan)
+        .filter(Scan.user_id == user_id)
         .order_by(Scan.scan_date.desc())
         .limit(limit)
         .all()
@@ -49,12 +50,13 @@ def export_scans_csv(db: Session, limit: int = 1000) -> str:
     return output.getvalue()
 
 
-def export_scans_json(db: Session, limit: int = 1000) -> List[Dict[str, Any]]:
+def export_scans_json(db: Session, limit: int = 1000, user_id: int = None) -> List[Dict[str, Any]]:
     """Export scan results as JSON-serializable list."""
     from ..models.models import Scan, File as FileModel
 
     scans = (
         db.query(Scan)
+        .filter(Scan.user_id == user_id)
         .order_by(Scan.scan_date.desc())
         .limit(limit)
         .all()
@@ -81,13 +83,14 @@ def export_scans_json(db: Session, limit: int = 1000) -> List[Dict[str, Any]]:
     return results
 
 
-def export_threats_csv(db: Session, limit: int = 1000) -> str:
+def export_threats_csv(db: Session, limit: int = 1000, user_id: int = None) -> str:
     """Export only threats (malicious/suspicious) as CSV."""
     from ..models.models import Scan, File as FileModel
 
     scans = (
         db.query(Scan)
-        .filter(Scan.classification.in_(["malicious", "suspicious"]))
+        .filter(Scan.user_id == user_id,
+              Scan.classification.in_(["malicious", "suspicious"]))
         .order_by(Scan.scan_date.desc())
         .limit(limit)
         .all()

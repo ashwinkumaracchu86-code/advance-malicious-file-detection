@@ -41,12 +41,14 @@ _threat_blocked_ips = []
 _threat_log = []
 
 
-def _add_notification(notification: dict):
-    """Add a notification to the queue and broadcast via WebSocket."""
+def _add_notification(notification: dict, user_id: Optional[int] = None):
+    """Add a notification to the queue and broadcast it to its owner via WebSocket."""
     global _notification_queue
     notification["id"] = len(_notification_queue) + 1
     notification["timestamp"] = datetime.now(timezone.utc).isoformat()
     notification["read"] = False
+    if user_id is not None:
+        notification["user_id"] = user_id
     _notification_queue.insert(0, notification)
     if len(_notification_queue) > 100:
         _notification_queue = _notification_queue[:100]
@@ -54,11 +56,16 @@ def _add_notification(notification: dict):
         from ..services.ws_manager import manager
         loop = asyncio.get_event_loop()
         if loop.is_running():
-            asyncio.ensure_future(manager.broadcast_notification(notification))
+            asyncio.ensure_future(manager.broadcast_notification(notification, user_id))
         else:
-            loop.run_until_complete(manager.broadcast_notification(notification))
+            loop.run_until_complete(manager.broadcast_notification(notification, user_id))
     except Exception:
         pass
+
+
+def filter_notifications_for_user(user_id: int) -> list:
+    """Return system notifications plus the ones owned by ``user_id``."""
+    return [n for n in _notification_queue if n.get("user_id") in (None, user_id)]
 
 
 def _get_file_extension(filename: str) -> str:
@@ -147,6 +154,7 @@ def perform_auto_scan(file_path: str, filename: str, db: Session, user_id: Optio
             "source_ip": analysis.get("source_ip", ""),
             "source_zone": "",
             "firewall_blocked": False,
+            "user_id": user_id,
         }
 
         source_ip = analysis.get("source_ip", "")
@@ -162,7 +170,7 @@ def perform_auto_scan(file_path: str, filename: str, db: Session, user_id: Optio
                 "filename": safe_name,
                 "risk_score": risk_score,
                 "classification": classification,
-            })
+            }, user_id=user_id)
         elif classification == "suspicious":
             _add_notification({
                 "type": "warning",
@@ -171,7 +179,7 @@ def perform_auto_scan(file_path: str, filename: str, db: Session, user_id: Optio
                 "filename": safe_name,
                 "risk_score": risk_score,
                 "classification": classification,
-            })
+            }, user_id=user_id)
             if _auto_quarantine_enabled:
                 quarantine_service.quarantine_file(
                     file_path=file_path,
@@ -187,7 +195,7 @@ def perform_auto_scan(file_path: str, filename: str, db: Session, user_id: Optio
                     "message": f'"{safe_name}" has been automatically quarantined.',
                     "filename": safe_name,
                     "risk_score": risk_score,
-                })
+                }, user_id=user_id)
         elif classification == "malicious":
             create_alert(analysis, db, user_id)
             _add_notification({
@@ -197,7 +205,7 @@ def perform_auto_scan(file_path: str, filename: str, db: Session, user_id: Optio
                 "filename": safe_name,
                 "risk_score": risk_score,
                 "classification": classification,
-            })
+            }, user_id=user_id)
 
             if source_ip and _firewall_integration_enabled:
                 firewall_service._blocked_ips[source_ip] = firewall_service._blocked_ips.get(source_ip, 0) + 1
@@ -232,7 +240,7 @@ def perform_auto_scan(file_path: str, filename: str, db: Session, user_id: Optio
                     "message": f"Source IP {source_ip} ({scan_result.get('source_zone', '?')}) blocked due to malicious file.",
                     "filename": safe_name,
                     "risk_score": risk_score,
-                })
+                }, user_id=user_id)
 
             if _auto_quarantine_enabled:
                 quarantine_service.quarantine_file(
@@ -249,7 +257,7 @@ def perform_auto_scan(file_path: str, filename: str, db: Session, user_id: Optio
                     "message": f'Malicious file "{safe_name}" has been automatically quarantined.',
                     "filename": safe_name,
                     "risk_score": risk_score,
-                })
+                }, user_id=user_id)
 
         log = AuditLog(
             user_id=user_id,
@@ -269,9 +277,9 @@ def perform_auto_scan(file_path: str, filename: str, db: Session, user_id: Optio
             from ..services.ws_manager import manager
             loop = asyncio.get_event_loop()
             if loop.is_running():
-                asyncio.ensure_future(manager.broadcast_scan_result(scan_result))
+                asyncio.ensure_future(manager.broadcast_scan_result(scan_result, user_id))
             else:
-                loop.run_until_complete(manager.broadcast_scan_result(scan_result))
+                loop.run_until_complete(manager.broadcast_scan_result(scan_result, user_id))
         except Exception:
             pass
 
@@ -302,7 +310,7 @@ async def scan_shared_file(
             "title": "Blocked Dangerous File",
             "message": f'File "{filename}" with extension {ext} was blocked. Executable/script files are not allowed.',
             "filename": filename,
-        })
+        }, user_id=current_user.id)
         raise HTTPException(
             status_code=403,
             detail=f"File type blocked: {ext} files are not allowed for security reasons"
@@ -363,15 +371,16 @@ async def scan_folder_files(
 def get_protection_status(
     current_user: User = Depends(get_current_user),
 ):
-    """Get current antivirus protection status."""
+    """Get current antivirus protection status for the authenticated user."""
+    history = [s for s in _scan_history if s.get("user_id") == current_user.id]
     return {
         "protection_enabled": _protection_enabled,
         "auto_scan_enabled": _auto_scan_enabled,
         "auto_quarantine_enabled": _auto_quarantine_enabled,
         "monitored_paths": _monitored_paths,
-        "total_scans": len(_scan_history),
-        "threats_detected": len([s for s in _scan_history if s.get("classification") in ("malicious", "suspicious")]),
-        "threats_blocked": len([s for s in _scan_history if s.get("quarantined")]),
+        "total_scans": len(history),
+        "threats_detected": len([s for s in history if s.get("classification") in ("malicious", "suspicious")]),
+        "threats_blocked": len([s for s in history if s.get("quarantined")]),
     }
 
 
@@ -494,8 +503,9 @@ def get_scan_history(
     limit: int = Query(50, ge=1, le=200),
     current_user: User = Depends(get_current_user),
 ):
-    """Get recent auto-scan history."""
-    return {"history": _scan_history[:limit]}
+    """Get recent auto-scan history for the authenticated user."""
+    history = [s for s in _scan_history if s.get("user_id") == current_user.id]
+    return {"history": history[:limit]}
 
 
 @router.get("/notifications")
@@ -503,17 +513,16 @@ def get_notifications(
     limit: int = Query(50, ge=1, le=100),
     current_user: User = Depends(get_current_user),
 ):
-    """Get notification queue."""
-    return {"notifications": _notification_queue[:limit]}
+    """Get notification queue (system notifications plus the caller's own)."""
+    return {"notifications": filter_notifications_for_user(current_user.id)[:limit]}
 
 
 @router.post("/notifications/mark-read")
 def mark_notifications_read(
     current_user: User = Depends(get_current_user),
 ):
-    """Mark all notifications as read."""
-    global _notification_queue
-    for n in _notification_queue:
+    """Mark the caller's notifications as read."""
+    for n in filter_notifications_for_user(current_user.id):
         n["read"] = True
     return {"status": "success", "message": "All notifications marked as read"}
 
@@ -522,9 +531,12 @@ def mark_notifications_read(
 def clear_notifications(
     current_user: User = Depends(get_current_user),
 ):
-    """Clear all notifications."""
+    """Clear the caller's notifications."""
     global _notification_queue
-    _notification_queue = []
+    _notification_queue = [
+        n for n in _notification_queue
+        if not (n.get("user_id") in (None, current_user.id))
+    ]
     return {"status": "cleared", "message": "All notifications cleared"}
 
 
@@ -542,15 +554,19 @@ def get_antivirus_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Get antivirus statistics."""
-    total_scans = len(_scan_history)
-    safe_count = len([s for s in _scan_history if s.get("classification") == "safe"])
-    suspicious_count = len([s for s in _scan_history if s.get("classification") == "suspicious"])
-    malicious_count = len([s for s in _scan_history if s.get("classification") == "malicious"])
-    quarantined_count = len([s for s in _scan_history if s.get("quarantined")])
+    """Get antivirus statistics for the authenticated user."""
+    history = [s for s in _scan_history if s.get("user_id") == current_user.id]
+    total_scans = len(history)
+    safe_count = len([s for s in history if s.get("classification") == "safe"])
+    suspicious_count = len([s for s in history if s.get("classification") == "suspicious"])
+    malicious_count = len([s for s in history if s.get("classification") == "malicious"])
+    quarantined_count = len([s for s in history if s.get("quarantined")])
 
-    db_scans = db.query(Scan).count()
-    db_threats = db.query(Scan).filter(Scan.classification.in_(["malicious", "suspicious"])).count()
+    db_scans = db.query(Scan).filter(Scan.user_id == current_user.id).count()
+    db_threats = db.query(Scan).filter(
+        Scan.user_id == current_user.id,
+        Scan.classification.in_(["malicious", "suspicious"]),
+    ).count()
 
     return {
         "total_scans": total_scans + db_scans,

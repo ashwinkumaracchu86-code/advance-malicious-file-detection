@@ -43,12 +43,15 @@ def quarantine_file(
             original_filename=original_filename,
             file_hash=file_hash,
             status="quarantined",
+            user_id=user_id,
             reviewed_by=user_id,
         )
 
         file_record = db.query(File).filter(File.file_path == file_path).first()
         if file_record:
             item.file_id = file_record.id
+            if item.user_id is None:
+                item.user_id = file_record.uploaded_by
             file_record.is_quarantined = True
 
         db.add(item)
@@ -64,21 +67,27 @@ def quarantine_file(
         return None
 
 
-def list_quarantined(db: Session) -> List[QuarantineItem]:
-    """List all quarantined items."""
-    return db.query(QuarantineItem).filter(
-        QuarantineItem.status == "quarantined"
-    ).order_by(QuarantineItem.quarantine_date.desc()).all()
+def list_quarantined(db: Session, user_id: Optional[int] = None) -> List[QuarantineItem]:
+    """List quarantined items belonging to the given user."""
+    query = db.query(QuarantineItem).filter(QuarantineItem.status == "quarantined")
+    if user_id is not None:
+        query = query.filter(QuarantineItem.user_id == user_id)
+    return query.order_by(QuarantineItem.quarantine_date.desc()).all()
 
 
-def get_quarantine_item(quarantine_id: int, db: Session) -> Optional[QuarantineItem]:
-    """Get a specific quarantine item by ID."""
-    return db.query(QuarantineItem).filter(QuarantineItem.id == quarantine_id).first()
+def get_quarantine_item(
+    quarantine_id: int, db: Session, user_id: Optional[int] = None
+) -> Optional[QuarantineItem]:
+    """Get a specific quarantine item by ID, restricted to its owner when given."""
+    query = db.query(QuarantineItem).filter(QuarantineItem.id == quarantine_id)
+    if user_id is not None:
+        query = query.filter(QuarantineItem.user_id == user_id)
+    return query.first()
 
 
-def restore_file(quarantine_id: int, db: Session) -> bool:
+def restore_file(quarantine_id: int, db: Session, user_id: Optional[int] = None) -> bool:
     """Restore a quarantined file to its original location."""
-    item = get_quarantine_item(quarantine_id, db)
+    item = get_quarantine_item(quarantine_id, db, user_id)
     if not item:
         logger.error(f"Quarantine item not found: {quarantine_id}")
         return False
@@ -117,9 +126,9 @@ def restore_file(quarantine_id: int, db: Session) -> bool:
         return False
 
 
-def delete_file(quarantine_id: int, db: Session) -> bool:
+def delete_file(quarantine_id: int, db: Session, user_id: Optional[int] = None) -> bool:
     """Permanently delete a quarantined file."""
-    item = get_quarantine_item(quarantine_id, db)
+    item = get_quarantine_item(quarantine_id, db, user_id)
     if not item:
         logger.error(f"Quarantine item not found: {quarantine_id}")
         return False

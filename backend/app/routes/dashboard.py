@@ -15,15 +15,20 @@ def get_statistics(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Get dashboard statistics."""
-    total_scans = db.query(Scan).count()
-    total_files = db.query(FileModel).count()
-    quarantined_count = db.query(QuarantineItem).filter(QuarantineItem.status == "quarantined").count()
+    """Get dashboard statistics for the authenticated user only."""
+    user_id = current_user.id
+    scans_query = db.query(Scan).filter(Scan.user_id == user_id)
+    files_query = db.query(FileModel).filter(FileModel.uploaded_by == user_id)
+    quarantine_query = db.query(QuarantineItem).filter(QuarantineItem.user_id == user_id)
 
-    safe_count = db.query(Scan).filter(Scan.classification == "safe").count()
-    low_risk_count = db.query(Scan).filter(Scan.classification == "low_risk").count()
-    suspicious_count = db.query(Scan).filter(Scan.classification == "suspicious").count()
-    malicious_count = db.query(Scan).filter(Scan.classification == "malicious").count()
+    total_scans = scans_query.count()
+    total_files = files_query.count()
+    quarantined_count = quarantine_query.filter(QuarantineItem.status == "quarantined").count()
+
+    safe_count = scans_query.filter(Scan.classification == "safe").count()
+    low_risk_count = scans_query.filter(Scan.classification == "low_risk").count()
+    suspicious_count = scans_query.filter(Scan.classification == "suspicious").count()
+    malicious_count = scans_query.filter(Scan.classification == "malicious").count()
 
     detection_percentage = 0.0
     if total_scans > 0:
@@ -31,14 +36,18 @@ def get_statistics(
         detection_percentage = round((detected / total_scans) * 100, 2)
 
     recent_scans = (
-        db.query(Scan)
+        scans_query
         .order_by(Scan.scan_date.desc())
         .limit(10)
         .all()
     )
     recent_list = []
     for scan in recent_scans:
-        file_record = db.query(FileModel).filter(FileModel.id == scan.file_id).first()
+        file_record = (
+            db.query(FileModel)
+            .filter(FileModel.id == scan.file_id, FileModel.uploaded_by == user_id)
+            .first()
+        )
         recent_list.append({
             "id": scan.id,
             "filename": file_record.original_filename if file_record else "Unknown",
@@ -55,14 +64,14 @@ def get_statistics(
     }
 
     file_type_stats = (
-        db.query(FileModel.extension, func.count(FileModel.id))
+        files_query.with_entities(FileModel.extension, func.count(FileModel.id))
         .group_by(FileModel.extension)
         .all()
     )
     file_type_distribution = {ext or "unknown": count for ext, count in file_type_stats}
 
     recent_dates = (
-        db.query(Scan.scan_date)
+        scans_query.with_entities(Scan.scan_date)
         .filter(Scan.scan_date.isnot(None))
         .all()
     )

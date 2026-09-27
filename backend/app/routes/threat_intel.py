@@ -23,16 +23,19 @@ def get_threat_dashboard(
     """Get threat intelligence dashboard data."""
     since = datetime.now(timezone.utc) - timedelta(days=days)
 
-    total_scans = db.query(Scan).filter(Scan.scan_date >= since).count()
+    total_scans = db.query(Scan).filter(Scan.user_id == current_user.id, Scan.scan_date >= since).count()
     malicious_count = db.query(Scan).filter(
+        Scan.user_id == current_user.id,
         Scan.scan_date >= since,
         Scan.classification == "malicious"
     ).count()
     suspicious_count = db.query(Scan).filter(
+        Scan.user_id == current_user.id,
         Scan.scan_date >= since,
         Scan.classification == "suspicious"
     ).count()
     safe_count = db.query(Scan).filter(
+        Scan.user_id == current_user.id,
         Scan.scan_date >= since,
         Scan.classification == "safe"
     ).count()
@@ -40,13 +43,17 @@ def get_threat_dashboard(
     risk_distribution = db.query(
         Scan.classification,
         func.count(Scan.id)
-    ).filter(Scan.scan_date >= since).group_by(Scan.classification).all()
+    ).filter(
+        Scan.user_id == current_user.id,
+        Scan.scan_date >= since
+    ).group_by(Scan.classification).all()
 
     daily_threats = db.query(
         func.date(Scan.scan_date).label("date"),
         func.count(Scan.id).label("count"),
         func.avg(Scan.risk_score).label("avg_risk")
     ).filter(
+        Scan.user_id == current_user.id,
         Scan.scan_date >= since,
         Scan.classification.in_(["malicious", "suspicious"])
     ).group_by(func.date(Scan.scan_date)).order_by(func.date(Scan.scan_date)).all()
@@ -56,6 +63,7 @@ def get_threat_dashboard(
     ).join(
         FileModel, Scan.file_id == FileModel.id
     ).filter(
+        Scan.user_id == current_user.id,
         Scan.scan_date >= since
     ).order_by(desc(Scan.risk_score)).limit(10).all()
 
@@ -84,6 +92,7 @@ def get_threat_dashboard(
     ).join(
         Scan, FileModel.id == Scan.file_id
     ).filter(
+        Scan.user_id == current_user.id,
         Scan.scan_date >= since,
         FileModel.extension.isnot(None),
         FileModel.extension != ""
@@ -138,6 +147,7 @@ def get_threat_trends(
         func.sum(func.cast(Scan.classification == "suspicious", Integer)).label("suspicious"),
         func.sum(func.cast(Scan.classification == "safe", Integer)).label("safe"),
     ).filter(
+        Scan.user_id == current_user.id,
         Scan.scan_date >= since
     ).group_by(func.date(Scan.scan_date)).order_by(func.date(Scan.scan_date)).all()
 
@@ -159,17 +169,18 @@ def get_threat_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Get overall threat statistics."""
-    total_scans = db.query(Scan).count()
-    total_malicious = db.query(Scan).filter(Scan.classification == "malicious").count()
-    total_suspicious = db.query(Scan).filter(Scan.classification == "suspicious").count()
+    """Get overall threat statistics for the authenticated user."""
+    scans_query = db.query(Scan).filter(Scan.user_id == current_user.id)
+    total_scans = scans_query.count()
+    total_malicious = scans_query.filter(Scan.classification == "malicious").count()
+    total_suspicious = scans_query.filter(Scan.classification == "suspicious").count()
 
-    avg_risk = db.query(func.avg(Scan.risk_score)).scalar() or 0
-    max_risk = db.query(func.max(Scan.risk_score)).scalar() or 0
+    avg_risk = scans_query.with_entities(func.avg(Scan.risk_score)).scalar() or 0
+    max_risk = scans_query.with_entities(func.max(Scan.risk_score)).scalar() or 0
 
     today = datetime.now(timezone.utc).date()
-    today_scans = db.query(Scan).filter(func.date(Scan.scan_date) == today).count()
-    today_threats = db.query(Scan).filter(
+    today_scans = scans_query.filter(func.date(Scan.scan_date) == today).count()
+    today_threats = scans_query.filter(
         func.date(Scan.scan_date) == today,
         Scan.classification.in_(["malicious", "suspicious"])
     ).count()

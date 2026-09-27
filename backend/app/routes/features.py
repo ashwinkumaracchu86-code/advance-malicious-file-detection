@@ -135,7 +135,7 @@ def export_scans_csv(
     db: Session = Depends(get_db),
 ):
     """Export all scans as CSV."""
-    csv_data = export_service.export_scans_csv(db, limit)
+    csv_data = export_service.export_scans_csv(db, limit, current_user.id)
     return Response(
         content=csv_data,
         media_type="text/csv",
@@ -150,7 +150,7 @@ def export_scans_json(
     db: Session = Depends(get_db),
 ):
     """Export all scans as JSON."""
-    json_data = export_service.export_scans_json(db, limit)
+    json_data = export_service.export_scans_json(db, limit, current_user.id)
     return Response(
         content=json.dumps(json_data, indent=2),
         media_type="application/json",
@@ -165,7 +165,7 @@ def export_threats_csv(
     db: Session = Depends(get_db),
 ):
     """Export threats only as CSV."""
-    csv_data = export_service.export_threats_csv(db, limit)
+    csv_data = export_service.export_threats_csv(db, limit, current_user.id)
     return Response(
         content=csv_data,
         media_type="text/csv",
@@ -180,7 +180,7 @@ def export_quarantine_csv(
 ):
     """Export quarantine records as CSV."""
     from ..models.models import QuarantineItem, File as FileModel
-    items = db.query(QuarantineItem).order_by(QuarantineItem.quarantine_date.desc()).all()
+    items = db.query(QuarantineItem).filter(QuarantineItem.user_id == current_user.id).order_by(QuarantineItem.quarantine_date.desc()).all()
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(["ID", "Filename", "Hash", "Status", "Quarantine Date"])
@@ -208,7 +208,7 @@ def export_logs_csv(
 ):
     """Export security logs as CSV."""
     from ..models.models import AuditLog
-    logs = db.query(AuditLog).order_by(AuditLog.timestamp.desc()).limit(limit).all()
+    logs = db.query(AuditLog).filter(AuditLog.user_id == current_user.id).order_by(AuditLog.timestamp.desc()).limit(limit).all()
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(["ID", "User ID", "Action", "Details", "Result", "Timestamp"])
@@ -248,7 +248,7 @@ def export_scans_excel(
     headers = ["Scan ID", "Filename", "File Size", "MD5", "SHA256", "Risk Score", "Classification", "Entropy", "Scan Date"]
     ws.append(headers)
 
-    scans = db.query(Scan).order_by(Scan.scan_date.desc()).limit(limit).all()
+    scans = db.query(Scan).filter(Scan.user_id == current_user.id).order_by(Scan.scan_date.desc()).limit(limit).all()
     for scan in scans:
         file_record = db.query(FileModel).filter(FileModel.id == scan.file_id).first()
         ws.append([
@@ -294,9 +294,16 @@ def export_threats_excel(
     headers = ["Scan ID", "Filename", "Risk Score", "Classification", "Detection Reasons", "Scan Date"]
     ws.append(headers)
 
-    scans = db.query(Scan).filter(
-        Scan.classification.in_(["malicious", "suspicious"])
-    ).order_by(Scan.scan_date.desc()).limit(limit).all()
+    scans = (
+        db.query(Scan)
+        .filter(
+            Scan.user_id == current_user.id,
+            Scan.classification.in_(["malicious", "suspicious"]),
+        )
+        .order_by(Scan.scan_date.desc())
+        .limit(limit)
+        .all()
+    )
 
     for scan in scans:
         file_record = db.query(FileModel).filter(FileModel.id == scan.file_id).first()

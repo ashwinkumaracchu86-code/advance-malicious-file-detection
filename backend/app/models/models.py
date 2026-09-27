@@ -91,6 +91,7 @@ class QuarantineItem(Base):
     file_hash = Column(String(64), index=True)
     quarantine_date = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     status = Column(String(20), default="quarantined")
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
     reviewed_by = Column(Integer, ForeignKey("users.id"))
 
     file = relationship("File", back_populates="quarantine_items")

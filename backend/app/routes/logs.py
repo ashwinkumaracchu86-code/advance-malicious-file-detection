@@ -1,5 +1,5 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from ..database import get_db
@@ -20,15 +20,15 @@ def list_logs(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """List audit logs with pagination and filtering."""
-    query = db.query(AuditLog)
+    """List the caller's own audit logs with pagination and filtering."""
+    query = db.query(AuditLog).filter(AuditLog.user_id == current_user.id)
 
     if action:
         query = query.filter(AuditLog.action == action)
     if search:
         query = query.filter(AuditLog.action.contains(search) | AuditLog.details.contains(search))
-    if user_id:
-        query = query.filter(AuditLog.user_id == user_id)
+    if user_id and user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You do not have permission to access this resource.")
 
     total = query.count()
     logs = query.order_by(desc(AuditLog.timestamp)).offset(skip).limit(limit).all()

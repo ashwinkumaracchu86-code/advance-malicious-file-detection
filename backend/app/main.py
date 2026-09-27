@@ -98,6 +98,33 @@ def _ensure_email_schema_columns():
         logger.warning(f"Email schema migration error on email_processed_uids (non-fatal): {e}")
 
 
+def _ensure_quarantine_owner_column():
+    """Add the quarantine owner column and backfill it from the owning file.
+
+    Additive only - required so quarantine data can be isolated per user.
+    """
+    from sqlalchemy import inspect, text
+    inspector = inspect(engine)
+    try:
+        if "quarantine_items" not in inspector.get_table_names():
+            return
+        columns = [col["name"] for col in inspector.get_columns("quarantine_items")]
+        if "user_id" not in columns:
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE quarantine_items ADD COLUMN user_id INTEGER"))
+                conn.commit()
+            logger.info("Added missing 'user_id' column to quarantine_items table.")
+        with engine.connect() as conn:
+            conn.execute(text(
+                "UPDATE quarantine_items SET user_id = ("
+                " SELECT f.uploaded_by FROM files f WHERE f.id = quarantine_items.file_id"
+                ") WHERE user_id IS NULL"
+            ))
+            conn.commit()
+    except Exception as e:
+        logger.warning(f"Quarantine owner migration error (non-fatal): {e}")
+
+
 def _migrate_existing_users():
     """Migrate existing users: set role based on is_admin flag."""
     db = SessionLocal()
@@ -148,6 +175,7 @@ async def lifespan(app: FastAPI):
 
     _ensure_schema_columns()
     _ensure_email_schema_columns()
+    _ensure_quarantine_owner_column()
     _migrate_existing_users()
 
     os.makedirs(UPLOADS_DIR, exist_ok=True)
@@ -221,6 +249,17 @@ app = FastAPI(
     version="1.1.0",
     lifespan=lifespan,
 )
+
+try:
+    # Idempotent bootstrap so ownership columns exist even when the app is
+    # imported without running the ASGI lifespan (e.g. TestClient without `with`).
+    Base.metadata.create_all(bind=engine)
+    _ensure_schema_columns()
+    _ensure_email_schema_columns()
+    _ensure_quarantine_owner_column()
+    _migrate_existing_users()
+except Exception as e:
+    logger.warning(f"Schema bootstrap error (non-fatal): {e}")
 
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RateLimitMiddleware, requests_per_minute=120)

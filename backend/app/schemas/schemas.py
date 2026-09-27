@@ -86,6 +86,7 @@ class QuarantineResponse(BaseModel):
     file_hash: Optional[str] = None
     quarantine_date: Optional[datetime] = None
     status: str = "quarantined"
+    user_id: Optional[int] = None
     reviewed_by: Optional[int] = None
 
     class Config:

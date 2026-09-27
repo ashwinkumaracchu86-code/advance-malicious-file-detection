@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models.models import User, File as FileModel, Scan, Report
 from ..security.auth import get_current_user
+from ..security.ownership import owned_or_forbidden
 
 logger = logging.getLogger(__name__)
 
@@ -144,10 +145,9 @@ def get_report(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Generate and download a PDF report for a scan."""
+    """Generate and download a PDF report for a scan (owner only)."""
     scan = db.query(Scan).filter(Scan.id == scan_id).first()
-    if not scan:
-        raise HTTPException(status_code=404, detail="Scan not found")
+    owned_or_forbidden(scan, current_user)
 
     file_record = db.query(FileModel).filter(FileModel.id == scan.file_id).first()
 

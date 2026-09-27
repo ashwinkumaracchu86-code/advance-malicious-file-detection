@@ -408,19 +408,23 @@ def list_quarantined_emails(skip: int = Query(0, ge=0), limit: int = Query(50, g
 @router.post("/quarantine/{item_id}/action")
 def quarantine_action(item_id: int, action_req: EmailQuarantineAction,
     db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    item = db.query(EmailQuarantine).filter(EmailQuarantine.id == item_id).first()
+    item = db.query(EmailQuarantine).filter(
+        EmailQuarantine.id == item_id,
+        EmailQuarantine.user_id == current_user.id).first()
     if not item:
-        raise HTTPException(status_code=404, detail="Quarantine item not found")
+        raise HTTPException(status_code=403, detail="You do not have permission to access this resource.")
     item.status = action_req.action
     item.reviewed_by = current_user.id
     item.reviewed_at = datetime.now(timezone.utc)
     item.action_taken = action_req.action
     if action_req.action == "release":
-        er = db.query(EmailRecord).filter(EmailRecord.id == item.email_id).first()
+        er = db.query(EmailRecord).filter(EmailRecord.id == item.email_id,
+            EmailRecord.user_id == current_user.id).first()
         if er:
             er.is_quarantined = False
     elif action_req.action == "delete":
-        er = db.query(EmailRecord).filter(EmailRecord.id == item.email_id).first()
+        er = db.query(EmailRecord).filter(EmailRecord.id == item.email_id,
+            EmailRecord.user_id == current_user.id).first()
         if er:
             db.delete(er)
     db.add(AuditLog(user_id=current_user.id, action=f"email_quarantine_{action_req.action}",
@@ -483,7 +487,9 @@ def release_email_record(
 @router.get("/events")
 def get_scan_events(limit: int = Query(100, ge=1, le=500), event_type: Optional[str] = None,
     db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    query = db.query(EmailScanEvent)
+    query = db.query(EmailScanEvent).join(
+        EmailRecord, EmailScanEvent.email_id == EmailRecord.id
+    ).filter(EmailRecord.user_id == current_user.id)
     if event_type:
         query = query.filter(EmailScanEvent.event_type == event_type)
     events = query.order_by(desc(EmailScanEvent.timestamp)).limit(limit).all()
@@ -711,8 +717,12 @@ async def websocket_events(websocket: WebSocket, token: str = Query(None)):
     if not payload:
         await websocket.close(code=4003, reason="Invalid or expired token")
         return
+    user_id = payload.get("sub")
+    if not user_id:
+        await websocket.close(code=4003, reason="Invalid token payload")
+        return
     await websocket.accept()
-    email_monitor.register_ws(websocket)
+    email_monitor.register_ws(websocket, int(user_id))
     try:
         while True:
             data = await websocket.receive_text()

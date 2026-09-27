@@ -10,6 +10,7 @@ from ..database import get_db
 from ..models.models import User, File as FileModel, Scan, AuditLog
 from ..schemas.schemas import FileResponse, ScanResponse
 from ..security.auth import get_current_user
+from ..security.ownership import owned_or_forbidden
 from ..security.middleware import MAX_UPLOAD_SIZE_BYTES, BLOCKED_EXTENSIONS
 from ..scanner.file_analyzer import analyze_file
 from ..scanner.hash_calculator import calculate_hashes
@@ -153,8 +154,15 @@ def list_files(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """List uploaded files with pagination."""
-    files = db.query(FileModel).order_by(FileModel.upload_date.desc()).offset(skip).limit(limit).all()
+    """List uploaded files with pagination (only the caller's own files)."""
+    files = (
+        db.query(FileModel)
+        .filter(FileModel.uploaded_by == current_user.id)
+        .order_by(FileModel.upload_date.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
     return [FileResponse.model_validate(f) for f in files]
 
 
@@ -164,8 +172,10 @@ def get_file(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Get file details by ID."""
-    file_record = db.query(FileModel).filter(FileModel.id == file_id).first()
-    if not file_record:
-        raise HTTPException(status_code=404, detail="File not found")
+    """Get file details by ID (owner only)."""
+    file_record = owned_or_forbidden(
+        db.query(FileModel).filter(FileModel.id == file_id).first(),
+        current_user,
+        "uploaded_by",
+    )
     return FileResponse.model_validate(file_record)

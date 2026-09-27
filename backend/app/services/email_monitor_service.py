@@ -567,7 +567,7 @@ class EmailMonitor:
         self._configs: Dict[int, Dict] = {}
         self._lock = threading.Lock()
         self._callbacks = []
-        self._ws_connections = set()
+        self._ws_connections = {}
         self._ws_lock = threading.Lock()
         self._loop = None
 
@@ -577,7 +577,7 @@ class EmailMonitor:
     def register_callback(self, callback):
         self._callbacks.append(callback)
 
-    def register_ws(self, ws):
+    def register_ws(self, ws, user_id=None):
         # Capture the running asyncio loop so the background thread can safely
         # schedule coroutine sends without touching get_event_loop() from a
         # non-loop thread.
@@ -588,11 +588,11 @@ class EmailMonitor:
         except RuntimeError:
             pass
         with self._ws_lock:
-            self._ws_connections.add(ws)
+            self._ws_connections[ws] = user_id
 
     def unregister_ws(self, ws):
         with self._ws_lock:
-            self._ws_connections.discard(ws)
+            self._ws_connections.pop(ws, None)
 
     def _notify(self, event_type: str, data: dict):
         for cb in self._callbacks:
@@ -602,8 +602,13 @@ class EmailMonitor:
                 logger.error(f"Callback error: {e}")
 
         message = json.dumps({"type": event_type, "data": data})
+        target_user = data.get("user_id")
         with self._ws_lock:
-            conns = list(self._ws_connections)
+            conns = [
+                (ws, owner)
+                for ws, owner in self._ws_connections.items()
+                if target_user is None or owner == target_user
+            ]
         if not conns:
             return
 
@@ -618,15 +623,15 @@ class EmailMonitor:
                 exc = Exception("unknown")
             if exc is not None:
                 with self._ws_lock:
-                    self._ws_connections.discard(ws)
+                    self._ws_connections.pop(ws, None)
 
-        for ws in conns:
+        for ws, _owner in conns:
             try:
                 fut = asyncio.run_coroutine_threadsafe(ws.send_text(message), loop)
                 fut.add_done_callback(lambda f, _ws=ws: _on_done(f, _ws))
             except Exception:
                 with self._ws_lock:
-                    self._ws_connections.discard(ws)
+                    self._ws_connections.pop(ws, None)
 
     def is_running(self) -> bool:
         return self._running
@@ -1077,6 +1082,7 @@ class EmailMonitor:
                             "sha256": aa.get("sha256"),
                             "reason": "; ".join(aa.get("detection_reasons", [])[:3]),
                             "timestamp": now.isoformat(),
+                            "user_id": user_id,
                         })
                         self._store_system_event(email_record.id, "attachment_quarantined", {
                             "email_id": email_record.id,
@@ -1199,6 +1205,7 @@ class EmailMonitor:
                 "dmarc": auth_results.get("dmarc"),
                 "reasons": risk_result.get("reasons", [])[:10],
                 "timestamp": now.isoformat(),
+                "user_id": user_id,
             })
         else:
             logger.error("Email processing failed for uid %s/%s", folder, uid)

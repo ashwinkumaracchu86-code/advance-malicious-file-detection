@@ -8,6 +8,7 @@ from ..database import get_db
 from ..models.models import User, File as FileModel, Scan, AuditLog
 from ..schemas.schemas import ScanResponse, FileResponse
 from ..security.auth import get_current_user
+from ..security.ownership import owned_or_forbidden
 from ..scanner.file_analyzer import analyze_file
 from ..services.virustotal import query_hash
 
@@ -22,10 +23,12 @@ def trigger_scan(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Trigger a scan for a specific file."""
-    file_record = db.query(FileModel).filter(FileModel.id == file_id).first()
-    if not file_record:
-        raise HTTPException(status_code=404, detail="File not found")
+    """Trigger a scan for a specific file (owner only)."""
+    file_record = owned_or_forbidden(
+        db.query(FileModel).filter(FileModel.id == file_id).first(),
+        current_user,
+        "uploaded_by",
+    )
 
     import os
     if not os.path.isfile(file_record.file_path):
@@ -73,8 +76,8 @@ def list_scans(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """List scans with pagination, search, filter, and sort."""
-    query = db.query(Scan)
+    """List the caller's own scans with pagination, search, filter, and sort."""
+    query = db.query(Scan).filter(Scan.user_id == current_user.id)
 
     if classification:
         query = query.filter(Scan.classification == classification)
@@ -114,10 +117,10 @@ def get_scan(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Get scan result by ID."""
-    scan = db.query(Scan).filter(Scan.id == scan_id).first()
-    if not scan:
-        raise HTTPException(status_code=404, detail="Scan not found")
+    """Get scan result by ID (owner only)."""
+    scan = owned_or_forbidden(
+        db.query(Scan).filter(Scan.id == scan_id).first(), current_user
+    )
 
     scan_data = ScanResponse.model_validate(scan)
     if scan.file:

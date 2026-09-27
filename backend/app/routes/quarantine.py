@@ -5,6 +5,7 @@ from ..database import get_db
 from ..models.models import User, File as FileModel, QuarantineItem, AuditLog
 from ..schemas.schemas import QuarantineResponse
 from ..security.auth import get_current_user
+from ..security.ownership import owned_or_forbidden
 from ..services import quarantine_service
 
 router = APIRouter(prefix="/quarantine", tags=["Quarantine"])
@@ -17,9 +18,11 @@ def quarantine_file(
     current_user: User = Depends(get_current_user),
 ):
     """Quarantine a file by moving it to the quarantine directory."""
-    file_record = db.query(FileModel).filter(FileModel.id == file_id).first()
-    if not file_record:
-        raise HTTPException(status_code=404, detail="File not found")
+    file_record = owned_or_forbidden(
+        db.query(FileModel).filter(FileModel.id == file_id).first(),
+        current_user,
+        "uploaded_by",
+    )
 
     if file_record.is_quarantined:
         raise HTTPException(status_code=400, detail="File is already quarantined")
@@ -52,8 +55,8 @@ def list_quarantined(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """List all quarantined items."""
-    items = quarantine_service.list_quarantined(db)
+    """List all quarantined items owned by the authenticated user."""
+    items = quarantine_service.list_quarantined(db, current_user.id)
     return [QuarantineResponse.model_validate(item) for item in items]
 
 
@@ -64,11 +67,11 @@ def restore_file(
     current_user: User = Depends(get_current_user),
 ):
     """Restore a quarantined file to its original location."""
-    item = quarantine_service.get_quarantine_item(item_id, db)
-    if not item:
-        raise HTTPException(status_code=404, detail="Quarantine item not found")
+    item = owned_or_forbidden(
+        quarantine_service.get_quarantine_item(item_id, db), current_user
+    )
 
-    success = quarantine_service.restore_file(item_id, db)
+    success = quarantine_service.restore_file(item_id, db, current_user.id)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to restore file")
 
@@ -91,11 +94,11 @@ def delete_quarantined_file(
     current_user: User = Depends(get_current_user),
 ):
     """Permanently delete a quarantined file (admin only)."""
-    item = quarantine_service.get_quarantine_item(item_id, db)
-    if not item:
-        raise HTTPException(status_code=404, detail="Quarantine item not found")
+    item = owned_or_forbidden(
+        quarantine_service.get_quarantine_item(item_id, db), current_user
+    )
 
-    success = quarantine_service.delete_file(item_id, db)
+    success = quarantine_service.delete_file(item_id, db, current_user.id)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to delete file")
 

@@ -1,4 +1,4 @@
-# Advanced Malicious File Detection System
+# ThreatShield 🛡️
 
 A comprehensive, real-time cybersecurity web application for detecting malicious files through static analysis, YARA pattern matching, reputation checking, and risk scoring.
 

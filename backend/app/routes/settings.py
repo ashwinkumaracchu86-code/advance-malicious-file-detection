@@ -28,7 +28,7 @@ SETTINGS_FILE = os.path.join(BASE_DIR, "system_settings.json")
 
 DEFAULT_SETTINGS = {
     "general": {
-        "system_name": "MFDS - Malicious File Detection System",
+        "system_name": "ThreatShield 🛡️ - Malicious File Detection System",
         "language": "en",
         "timezone": "UTC",
         "session_timeout": 30,

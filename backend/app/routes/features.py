@@ -56,13 +56,13 @@ def test_webhooks(current_user: User = Depends(get_current_user), db: Session = 
     urls = webhook_service.get_webhook_urls(db)
     result = {
         "slack": webhook_service.send_slack_alert(
-            "Test Alert", "This is a test alert from MFDS", "info", url=urls["slack"]
+            "Test Alert", "This is a test alert from ThreatShield 🛡️", "info", url=urls["slack"]
         ),
         "discord": webhook_service.send_discord_alert(
-            "Test Alert", "This is a test alert from MFDS", "info", url=urls["discord"]
+            "Test Alert", "This is a test alert from ThreatShield 🛡️", "info", url=urls["discord"]
         ),
         "custom": webhook_service.send_custom_webhook(
-            "Test Alert", "This is a test alert from MFDS", "info", url=urls["custom"]
+            "Test Alert", "This is a test alert from ThreatShield 🛡️", "info", url=urls["custom"]
         ),
     }
     return {"status": "sent", "results": result}

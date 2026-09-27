@@ -244,7 +244,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Malicious File Detection System",
+    title="ThreatShield 🛡️",
     description="Backend API for detecting malicious files using multiple analysis techniques",
     version="1.1.0",
     lifespan=lifespan,
@@ -299,7 +299,7 @@ app.include_router(firewall.router)
 @app.get("/")
 def root():
     return {
-        "name": "Malicious File Detection System",
+        "name": "ThreatShield 🛡️",
         "version": "1.0.0",
         "status": "running",
         "docs": "/docs",

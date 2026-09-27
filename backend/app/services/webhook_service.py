@@ -32,9 +32,9 @@ def send_slack_alert(title: str, message: str, severity: str = "info", url: Opti
         "attachments": [
             {
                 "color": color_map.get(severity, "#36a64f"),
-                "title": f"[MFDS] {title}",
+                "title": f"[ThreatShield 🛡️] {title}",
                 "text": message,
-                "footer": "Malicious File Detection System",
+                "footer": "ThreatShield 🛡️",
                 "ts": int(datetime.now(timezone.utc).timestamp()),
             }
         ]
@@ -67,10 +67,10 @@ def send_discord_alert(title: str, message: str, severity: str = "info", url: Op
     payload = {
         "embeds": [
             {
-                "title": f"[MFDS] {title}",
+                "title": f"[ThreatShield 🛡️] {title}",
                 "description": message,
                 "color": color_map.get(severity, 0x36A64F),
-                "footer": {"text": "Malicious File Detection System"},
+                "footer": {"text": "ThreatShield 🛡️"},
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         ]

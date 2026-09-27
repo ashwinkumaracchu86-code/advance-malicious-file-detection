@@ -42,7 +42,7 @@ export default function Layout() {
   const pathKey = Object.keys(pageTitles).find((key) =>
     location.pathname.startsWith(key)
   );
-  const title = pageTitles[pathKey] || 'Advanced Malicious File Detection System';
+  const title = pageTitles[pathKey] || 'ThreatShield 🛡️';
 
   return (
     <div className="min-h-screen bg-dark-950 relative">

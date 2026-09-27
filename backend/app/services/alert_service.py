@@ -91,7 +91,7 @@ Timestamp: {alert_details['timestamp']}
 Detection Reasons:
 {chr(10).join(f'  - {r}' for r in alert_details['detection_reasons'])}
 
-This is an automated alert from the Malicious File Detection System.
+This is an automated alert from ThreatShield 🛡️.
 """
         msg.attach(MIMEText(body, "plain"))
 

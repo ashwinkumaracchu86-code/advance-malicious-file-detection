@@ -265,7 +265,7 @@ export default function SettingsPage() {
             icon={FiMonitor}
             value={settings.general.system_name}
             onChange={(e) => update('general', 'system_name', e.target.value)}
-            placeholder="MFDS - Malicious File Detection System"
+            placeholder="ThreatShield 🛡️ - Malicious File Detection System"
           />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <SelectField

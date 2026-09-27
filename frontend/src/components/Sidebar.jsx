@@ -114,7 +114,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen = false, onMob
                 <FiShield className="w-4 h-4 text-white" />
               </div>
               <div>
-                <span className="font-bold text-dark-100 text-sm tracking-tight">MFDS</span>
+                <span className="font-bold text-dark-100 text-sm tracking-tight">ThreatShield 🛡️</span>
                 <span className="block text-[10px] text-dark-500 -mt-0.5">Security Scanner</span>
               </div>
             </div>

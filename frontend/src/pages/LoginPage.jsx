@@ -205,8 +205,8 @@ export default function LoginPage() {
         </div>
         <div className="w-full max-w-md relative z-10">
           <div className="text-center mb-8">
-            <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="MFDS Logo" className="w-16 h-16 mx-auto mb-4" />
-            <h1 className="text-3xl font-bold text-white tracking-tight">MFDS</h1>
+            <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="ThreatShield Logo" className="w-16 h-16 mx-auto mb-4" />
+            <h1 className="text-3xl font-bold text-white tracking-tight">ThreatShield 🛡️</h1>
             <p className="text-slate-400 text-sm mt-1">Advanced Malicious File Detection System</p>
           </div>
           <div className="bg-slate-900/60 backdrop-blur-xl border border-slate-700/50 rounded-2xl shadow-2xl shadow-black/40 p-8">
@@ -250,8 +250,8 @@ export default function LoginPage() {
 
       <div className="w-full max-w-md relative z-10">
         <div className="text-center mb-8">
-          <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="MFDS Logo" className="w-16 h-16 mx-auto mb-4" />
-          <h1 className="text-3xl font-bold text-white tracking-tight">MFDS</h1>
+          <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="ThreatShield Logo" className="w-16 h-16 mx-auto mb-4" />
+          <h1 className="text-3xl font-bold text-white tracking-tight">ThreatShield 🛡️</h1>
           <p className="text-slate-400 text-sm mt-1">Advanced Malicious File Detection System</p>
         </div>
 

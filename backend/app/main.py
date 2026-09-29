@@ -168,6 +168,14 @@ def _ensure_default_accounts():
             db.add(admin)
             db.commit()
             logger.info("Default admin account created.")
+        elif not verify_password("Ashwin@gowda1234", admin.hashed_password):
+            admin.username = "Ashwin_gowda1"
+            admin.email = "ashwinkumaracchu86@gmail.com"
+            admin.hashed_password = get_password_hash("Ashwin@gowda1234")
+            admin.is_admin = True
+            admin.role = ADMIN_ROLE
+            db.commit()
+            logger.info("Admin password re-synchronized.")
         else:
             logger.info("Admin account already exists. Preserving existing account credentials.")
 
@@ -183,6 +191,10 @@ def _ensure_default_accounts():
             db.add(u2)
             db.commit()
             logger.info("Default user account created.")
+        elif not verify_password("password123", u2.hashed_password):
+            u2.hashed_password = get_password_hash("password123")
+            db.commit()
+            logger.info("User 'anush' password re-synchronized.")
         else:
             logger.info("User 'anush' already exists. Preserving existing credentials.")
     except Exception as e:

@@ -84,17 +84,31 @@ _PBKDF2_ITERATIONS = 310000
 
 
 def get_password_hash(password: str) -> str:
+    # 1. Direct bcrypt
+    try:
+        import bcrypt
+        pw_bytes = password.encode("utf-8")[:72]
+        salt = bcrypt.gensalt(rounds=12)
+        return bcrypt.hashpw(pw_bytes, salt).decode("utf-8")
+    except Exception:
+        pass
+    # 2. Passlib context
     if _BCRYPT_OK and pwd_context is not None:
         try:
             return pwd_context.hash(password)
         except Exception:
             pass
+    # 3. PBKDF2 fallback
     salt = secrets.token_hex(16)
-    dk = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), _PBKDF2_ITERATIONS)
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), _PBKDF2_ITERATIONS)
     return f"pbkdf2:sha256:{_PBKDF2_ITERATIONS}${salt}${dk.hex()}"
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
+    if not plain_password or not hashed_password:
+        return False
+
+    # 1. PBKDF2 hash verification
     if hashed_password.startswith("pbkdf2:sha256:"):
         try:
             parts = hashed_password.split("$")
@@ -102,15 +116,28 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
             salt = parts[1]
             stored_hash = parts[2]
             iterations = int(header.split(":")[2])
-            dk = hashlib.pbkdf2_hmac("sha256", plain_password.encode(), salt.encode(), iterations)
+            dk = hashlib.pbkdf2_hmac("sha256", plain_password.encode("utf-8"), salt.encode("utf-8"), iterations)
             return secrets.compare_digest(dk.hex(), stored_hash)
         except Exception:
             return False
-    if _BCRYPT_OK and pwd_context is not None:
+
+    # 2. Direct bcrypt hash verification ($2a$, $2b$, $2y$)
+    if hashed_password.startswith(("$2a$", "$2b$", "$2y$")):
+        try:
+            import bcrypt
+            pw_bytes = plain_password.encode("utf-8")[:72]
+            hash_bytes = hashed_password.encode("utf-8")
+            return bcrypt.checkpw(pw_bytes, hash_bytes)
+        except Exception as e:
+            logger.warning(f"Direct bcrypt verification error: {e}")
+
+    # 3. Passlib fallback
+    if pwd_context is not None:
         try:
             return pwd_context.verify(plain_password, hashed_password)
         except Exception:
-            return False
+            pass
+
     return False
 
 

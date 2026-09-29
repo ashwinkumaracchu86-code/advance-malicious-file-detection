@@ -41,8 +41,8 @@ class LoginAttemptTracker:
     def __init__(self):
         self._attempts: Dict[str, list] = defaultdict(list)
         self._lockouts: Dict[str, datetime] = {}
-        self._max_attempts = int(os.getenv("MAX_LOGIN_ATTEMPTS", "5"))
-        self._lockout_minutes = int(os.getenv("LOCKOUT_MINUTES", "15"))
+        self._max_attempts = int(os.getenv("MAX_LOGIN_ATTEMPTS", "10"))
+        self._lockout_minutes = int(os.getenv("LOCKOUT_MINUTES", "10"))
         self._window_minutes = int(os.getenv("LOGIN_WINDOW_MINUTES", "5"))
 
     def _cleanup_old_attempts(self, ip: str):

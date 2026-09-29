@@ -138,29 +138,30 @@ def import_email_data():
                     EmailMonitoringConfig.user_id == user.id
                 ).first()
 
-                if not config_row:
+                if config_row:
+                    print(f"EmailMonitoringConfig already exists for user {user.username} (ID: {user.id}). Preserving existing user settings.")
+                else:
                     config_row = EmailMonitoringConfig(user_id=user.id)
+                    config_row.provider = "gmail"
+                    config_row.imap_host = cfg_data.get("host", "imap.gmail.com")
+                    config_row.imap_port = cfg_data.get("port", 993)
+                    config_row.use_ssl = cfg_data.get("secure", True)
+                    config_row.username = cfg_data.get("user", "")
+                    config_row.password_encrypted = encrypt_value(plain_pass)
+                    config_row.is_active = True
+                    config_row.connection_status = "connected"
+                    config_row.last_error = None
+                    config_row.last_check = datetime.now(timezone.utc)
+                    config_row.last_success_check = datetime.now(timezone.utc)
+                    config_row.last_heartbeat = datetime.now(timezone.utc)
+                    config_row.folders_to_monitor = '["INBOX"]'
+                    config_row.polling_interval_seconds = 30
+                    config_row.auto_quarantine_threshold = 70.0
+                    config_row.max_attachment_size_mb = 25
                     db.add(config_row)
-
-                config_row.provider = "gmail"
-                config_row.imap_host = cfg_data.get("host", "imap.gmail.com")
-                config_row.imap_port = cfg_data.get("port", 993)
-                config_row.use_ssl = cfg_data.get("secure", True)
-                config_row.username = cfg_data.get("user", "")
-                config_row.password_encrypted = encrypt_value(plain_pass)
-                config_row.is_active = True
-                config_row.connection_status = "connected"
-                config_row.last_error = None
-                config_row.last_check = datetime.now(timezone.utc)
-                config_row.last_success_check = datetime.now(timezone.utc)
-                config_row.last_heartbeat = datetime.now(timezone.utc)
-                config_row.folders_to_monitor = '["INBOX"]'
-                config_row.polling_interval_seconds = 30
-                config_row.auto_quarantine_threshold = 70.0
-                config_row.max_attachment_size_mb = 25
-                db.commit()
-                db.refresh(config_row)
-                print(f"Updated EmailMonitoringConfig (ID: {config_row.id}) with live Gmail credentials.")
+                    db.commit()
+                    db.refresh(config_row)
+                    print(f"Created initial EmailMonitoringConfig (ID: {config_row.id}) for user {user.username}.")
             else:
                 print("Could not decrypt IMAP password from Email/data/config.json.")
         else:

@@ -115,6 +115,7 @@ export default function EmailSettingsPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [hasSavedPassword, setHasSavedPassword] = useState(false)
   const [status, setStatus] = useState({
     connected: false,
     lastCheckTime: null,
@@ -137,6 +138,7 @@ export default function EmailSettingsPage() {
       const data = res.data || res
       if (data && data.configured) {
         setIsConfigured(true)
+        setHasSavedPassword(Boolean(data.has_password))
         const prov = data.provider || 'gmail'
         const preset = PROVIDER_PRESETS[prov] || PROVIDER_PRESETS.gmail
         setConfig({
@@ -151,11 +153,19 @@ export default function EmailSettingsPage() {
             ? data.folders_to_monitor.join(', ')
             : (data.folders_to_monitor || 'INBOX'),
           maxAttachmentSizeMB: data.max_attachment_size_mb || 25,
-          autoQuarantineThreshold: data.auto_quarantine_threshold || 70,
+          autoQuarantineThreshold: data.auto_quarantine_threshold ?? 70,
         })
+      } else {
+        // Not configured for this user: clean reset
+        setIsConfigured(false)
+        setHasSavedPassword(false)
+        setConfig(DEFAULT_CONFIG)
       }
     } catch {
       toast.error('Failed to load configuration')
+      setIsConfigured(false)
+      setHasSavedPassword(false)
+      setConfig(DEFAULT_CONFIG)
     } finally {
       setIsLoading(false)
     }
@@ -166,13 +176,18 @@ export default function EmailSettingsPage() {
       const res = await emailSecurityAPI.getMonitoringStatus()
       const data = res.data || res
       if (data) {
-        const running = data.monitor_running ?? false
+        const isUserMonitoring = Boolean(data.is_active && data.monitoring_status === 'active')
         setStatus({
-          connected: running || data.connection_status === 'connected',
+          connected: data.connection_status === 'connected',
           lastCheckTime: data.last_check || null,
-          isMonitoring: running,
+          isMonitoring: isUserMonitoring,
         })
-        setIsConfigured((prev) => prev || running || data.active_configs > 0)
+        if (data.configured !== undefined) {
+          setIsConfigured(Boolean(data.configured))
+        }
+        if (data.has_password !== undefined) {
+          setHasSavedPassword(Boolean(data.has_password))
+        }
       }
     } catch {
       // silent polling
@@ -231,7 +246,7 @@ export default function EmailSettingsPage() {
         newErrors.username = 'Please enter your full Gmail address (e.g. name@gmail.com)'
       }
     }
-    if (field === 'password' && !isConfigured && !config.password) {
+    if (field === 'password' && !hasSavedPassword && !config.password) {
       newErrors.password = config.provider === 'gmail'
         ? 'Google App Password is required'
         : 'Password is required'
@@ -258,7 +273,7 @@ export default function EmailSettingsPage() {
     } else if (config.provider === 'gmail' && !config.username.includes('@')) {
       newErrors.username = 'Please enter your full Gmail address (e.g. name@gmail.com)'
     }
-    if (!skipPassword && !config.password) {
+    if (!skipPassword && !hasSavedPassword && !config.password.trim()) {
       newErrors.password = config.provider === 'gmail'
         ? 'Google App Password is required'
         : 'Password is required'
@@ -306,7 +321,7 @@ export default function EmailSettingsPage() {
   }
 
   const handleSave = async () => {
-    if (!validate(isConfigured)) {
+    if (!validate(hasSavedPassword)) {
       toast.error('Please fix the errors in the form')
       return
     }
@@ -315,6 +330,10 @@ export default function EmailSettingsPage() {
       const payload = getCleanPayload()
       await emailSecurityAPI.saveMonitoringConfig(payload)
       setIsConfigured(true)
+      if (payload.password) {
+        setHasSavedPassword(true)
+        setConfig((prev) => ({ ...prev, password: '' }))
+      }
       toast.success('Email settings saved successfully')
     } catch (err) {
       const msg = err?.response?.data?.detail || err?.message || 'Failed to save configuration'
@@ -325,7 +344,7 @@ export default function EmailSettingsPage() {
   }
 
   const handleTestConnection = async () => {
-    if (!validate(isConfigured)) {
+    if (!validate(hasSavedPassword)) {
       toast.error('Please fill in your email address and Google App Password')
       return
     }
@@ -360,7 +379,7 @@ export default function EmailSettingsPage() {
   }
 
   const handleStartMonitoring = async () => {
-    if (!validate(isConfigured)) {
+    if (!validate(hasSavedPassword)) {
       toast.error('Please complete all required fields')
       return
     }
@@ -371,6 +390,10 @@ export default function EmailSettingsPage() {
       await emailSecurityAPI.startMonitoring()
       setStatus((prev) => ({ ...prev, isMonitoring: true, connected: true }))
       setIsConfigured(true)
+      if (payload.password) {
+        setHasSavedPassword(true)
+        setConfig((prev) => ({ ...prev, password: '' }))
+      }
       toast.success('Live email monitoring started')
       await loadStatus()
     } catch (err) {
@@ -393,20 +416,6 @@ export default function EmailSettingsPage() {
     } finally {
       setIsStoppingMonitor(false)
     }
-  }
-
-  const handleLoadVerifiedAccount = () => {
-    setConfig((prev) => ({
-      ...prev,
-      provider: 'gmail',
-      imapHost: 'imap.gmail.com',
-      imapPort: 993,
-      useSSL: true,
-      username: 'acchugowda9482@gmail.com',
-      password: 'wcmepqhmwiteqbol',
-    }))
-    setTestResult(null)
-    toast.success('Loaded verified working Gmail credentials!')
   }
 
   const formatLastCheck = (time) => {
@@ -600,14 +609,6 @@ export default function EmailSettingsPage() {
                     <strong>1. Why this happened:</strong> Google strictly forbids using your regular personal password (e.g. Gmail sign-in password) for IMAP apps. You must use a <strong>16-character App Password</strong> generated from your Google Security console.
                   </p>
                   <div className="flex flex-wrap items-center gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={handleLoadVerifiedAccount}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-sm transition-all"
-                    >
-                      <FiCheckCircle className="w-3.5 h-3.5" />
-                      <span>Use Verified Working Account (acchugowda9482@gmail.com)</span>
-                    </button>
                     <a
                       href="https://myaccount.google.com/apppasswords"
                       target="_blank"
@@ -707,14 +708,6 @@ export default function EmailSettingsPage() {
 
               {/* Quick Actions */}
               <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleLoadVerifiedAccount}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/40 rounded-lg text-xs font-semibold transition-all shadow-sm"
-                >
-                  <FiCheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Use Verified Account</span>
-                </button>
                 <a
                   href="https://myaccount.google.com/apppasswords"
                   target="_blank"
@@ -938,7 +931,15 @@ export default function EmailSettingsPage() {
               label={isGmail ? 'Google App Password' : 'Password'}
               icon={FiLock}
               extraBadge={
-                isGmail && passwordLength > 0 ? (
+                hasSavedPassword && !config.password ? (
+                  <span className="text-[11px] font-semibold text-emerald-400 flex items-center gap-1 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                    <FiCheck className="w-3 h-3" /> App Password Saved
+                  </span>
+                ) : !hasSavedPassword && !config.password ? (
+                  <span className="text-[11px] font-semibold text-rose-400 flex items-center gap-1 bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/20">
+                    <FiAlertTriangle className="w-3 h-3" /> App Password Required
+                  </span>
+                ) : isGmail && passwordLength > 0 ? (
                   passwordLength === 16 && !isStandardPassword ? (
                     <span className="text-[11px] font-semibold text-emerald-400 flex items-center gap-1">
                       <FiCheck className="w-3.5 h-3.5" /> 16 letters (Valid)
@@ -960,8 +961,10 @@ export default function EmailSettingsPage() {
               }
               helpText={
                 isGmail
-                  ? '16-letter code from Google. Spaces are stripped automatically.'
-                  : isConfigured
+                  ? hasSavedPassword
+                    ? 'Leave blank to preserve current securely saved App Password, or enter a new 16-letter code to update.'
+                    : '16-letter code from Google. Spaces are stripped automatically.'
+                  : hasSavedPassword
                   ? 'Leave blank to preserve current saved password'
                   : 'Enter mailbox password'
               }
@@ -973,10 +976,10 @@ export default function EmailSettingsPage() {
                   onChange={(e) => handleChange('password', e.target.value)}
                   onBlur={() => handleBlur('password')}
                   placeholder={
-                    isGmail
+                    hasSavedPassword
+                      ? '•••••••••••••••• (Saved securely on server - leave blank to keep)'
+                      : isGmail
                       ? '16-character code (e.g. abcd efgh ijkl mnop)'
-                      : isConfigured
-                      ? 'Leave blank to keep saved password'
                       : 'Enter password'
                   }
                   autoComplete="new-password"
@@ -1002,14 +1005,19 @@ export default function EmailSettingsPage() {
                 <div className="mt-2 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-start gap-2">
                   <FiAlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                   <div>
-                    <strong>Standard Password Detected:</strong> Google strictly blocks regular passwords on IMAP for security. You must generate a 16-letter App Password at <code>myaccount.google.com/apppasswords</code>, or click <em>Use Verified Account</em> above.
+                    <strong>Standard Password Detected:</strong> Google strictly blocks regular passwords on IMAP for security. You must generate a 16-letter App Password at <code>myaccount.google.com/apppasswords</code>.
                   </div>
                 </div>
               )}
 
-              {isConfigured && !config.password && (
+              {hasSavedPassword && !config.password && (
                 <p className="text-xs text-emerald-400 mt-1 flex items-center gap-1">
-                  <FiCheck className="w-3.5 h-3.5" /> Password securely saved in database
+                  <FiCheck className="w-3.5 h-3.5" /> App Password configured securely on server (leave blank to keep)
+                </p>
+              )}
+              {!hasSavedPassword && !config.password && (
+                <p className="text-xs text-rose-400 mt-1 flex items-center gap-1">
+                  <FiAlertTriangle className="w-3.5 h-3.5" /> App Password required to connect mailbox
                 </p>
               )}
               {touched.password && errors.password && (

@@ -151,28 +151,25 @@ def _migrate_existing_users():
 
 
 def _ensure_default_accounts():
-    """Ensure pre-configured accounts (Ashwin_gowda1 admin and anush user) are ready to login."""
+    """Ensure initial admin account exists. Never overwrite existing accounts or passwords."""
     db = SessionLocal()
     try:
-        u = db.query(User).filter_by(username="Ashwin_gowda1").first()
-        if not u:
-            u = db.query(User).filter_by(email="ashwinkumaracchu86@gmail.com").first()
-        if u:
-            u.username = "Ashwin_gowda1"
-            u.is_admin = True
-            u.role = ADMIN_ROLE
-            u.hashed_password = get_password_hash("Ashwin@gowda1234")
-            db.commit()
-        else:
-            u = User(
+        admin = db.query(User).filter(
+            (User.username == "Ashwin_gowda1") | (User.email == "ashwinkumaracchu86@gmail.com")
+        ).first()
+        if not admin:
+            admin = User(
                 username="Ashwin_gowda1",
                 email="ashwinkumaracchu86@gmail.com",
                 hashed_password=get_password_hash("Ashwin@gowda1234"),
                 is_admin=True,
                 role=ADMIN_ROLE,
             )
-            db.add(u)
+            db.add(admin)
             db.commit()
+            logger.info("Default admin account created.")
+        else:
+            logger.info("Admin account already exists. Preserving existing account credentials.")
 
         u2 = db.query(User).filter_by(username="anush").first()
         if not u2:
@@ -185,10 +182,9 @@ def _ensure_default_accounts():
             )
             db.add(u2)
             db.commit()
+            logger.info("Default user account created.")
         else:
-            u2.hashed_password = get_password_hash("password123")
-            db.commit()
-        logger.info("Default user accounts verified and ready.")
+            logger.info("User 'anush' already exists. Preserving existing credentials.")
     except Exception as e:
         logger.warning(f"Default accounts seeding error (non-fatal): {e}")
         db.rollback()

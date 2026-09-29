@@ -505,14 +505,28 @@ def get_monitoring_config(db: Session = Depends(get_db),
     config = db.query(EmailMonitoringConfig).filter(
         EmailMonitoringConfig.user_id == current_user.id).first()
     if not config:
-        return {"configured": False}
-    return {"configured": True, "provider": config.provider, "imap_host": config.imap_host,
-        "imap_port": config.imap_port, "use_ssl": config.use_ssl, "username": config.username,
-        "polling_interval_seconds": config.polling_interval_seconds,
+        return {
+            "configured": False,
+            "has_password": False,
+            "provider": "gmail",
+            "imap_host": "imap.gmail.com",
+            "imap_port": 993,
+            "use_ssl": True,
+            "username": "",
+        }
+    return {
+        "configured": True,
+        "has_password": bool(config.password_encrypted),
+        "provider": config.provider or "gmail",
+        "imap_host": config.imap_host or "imap.gmail.com",
+        "imap_port": config.imap_port or 993,
+        "use_ssl": config.use_ssl if config.use_ssl is not None else True,
+        "username": config.username or "",
+        "polling_interval_seconds": config.polling_interval_seconds or 60,
         "folders_to_monitor": json.loads(config.folders_to_monitor) if config.folders_to_monitor else ["INBOX"],
-        "max_attachment_size_mb": config.max_attachment_size_mb,
-        "auto_quarantine_threshold": config.auto_quarantine_threshold,
-        "is_active": config.is_active,
+        "max_attachment_size_mb": config.max_attachment_size_mb or 25,
+        "auto_quarantine_threshold": config.auto_quarantine_threshold if config.auto_quarantine_threshold is not None else 70,
+        "is_active": bool(config.is_active),
         "last_check": config.last_check.isoformat() if config.last_check else None,
         "last_success_check": config.last_success_check.isoformat() if config.last_success_check else None,
         "last_error": config.last_error,
@@ -520,15 +534,15 @@ def get_monitoring_config(db: Session = Depends(get_db),
         "last_heartbeat": config.last_heartbeat.isoformat() if config.last_heartbeat else None,
         "emails_checked": config.emails_checked or 0,
         "threats_detected": config.threats_detected or 0,
-        "quarantined_attachments": config.quarantined_attachments or 0}
+        "quarantined_attachments": config.quarantined_attachments or 0,
+    }
 
 
 @router.post("/monitoring/config")
 def save_monitoring_config(config_req: MonitoringConfigRequest, db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)):
-    # Auto-sanitize password (e.g. Google App Passwords copied with 4-space chunks like 'abcd efgh ijkl mnop')
-    if config_req.password:
-        config_req.password = config_req.password.strip().replace(" ", "")
+    # Auto-sanitize password (strip spaces from Google App Passwords like 'abcd efgh ijkl mnop')
+    clean_password = (config_req.password or "").strip().replace(" ", "")
 
     # Auto-correct and enforce Gmail IMAP host and SSL settings
     is_gmail = (
@@ -543,83 +557,103 @@ def save_monitoring_config(config_req: MonitoringConfigRequest, db: Session = De
         config_req.imap_port = 993
         config_req.use_ssl = True
 
-    if config_req.password and not config_req.password.startswith("enc:"):
-        encrypted = encrypt_value(config_req.password)
-    else:
-        encrypted = config_req.password
     existing = db.query(EmailMonitoringConfig).filter(
-        EmailMonitoringConfig.user_id == current_user.id).first()
+        EmailMonitoringConfig.user_id == current_user.id
+    ).first()
+
+    if clean_password:
+        encrypted = encrypt_value(clean_password)
+    elif existing and existing.password_encrypted:
+        # Preserve user's existing App Password
+        encrypted = existing.password_encrypted
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="App Password is required. For Gmail, enter your 16-character Google App Password.",
+        )
+
     if existing:
-        for attr in ["provider", "imap_host", "imap_port", "use_ssl", "username",
-                      "polling_interval_seconds", "max_attachment_size_mb", "auto_quarantine_threshold"]:
-            setattr(existing, attr, getattr(config_req, attr))
-        if encrypted:
-            existing.password_encrypted = encrypted
+        existing.provider = config_req.provider
+        existing.imap_host = config_req.imap_host
+        existing.imap_port = config_req.imap_port
+        existing.use_ssl = config_req.use_ssl
+        existing.username = config_req.username.strip()
+        existing.password_encrypted = encrypted
+        existing.polling_interval_seconds = config_req.polling_interval_seconds
+        existing.max_attachment_size_mb = config_req.max_attachment_size_mb
+        existing.auto_quarantine_threshold = config_req.auto_quarantine_threshold
         existing.folders_to_monitor = json.dumps(config_req.folders_to_monitor)
         config_record = existing
     else:
         config_record = EmailMonitoringConfig(
-            user_id=current_user.id, provider=config_req.provider,
-            imap_host=config_req.imap_host, imap_port=config_req.imap_port,
-            use_ssl=config_req.use_ssl, username=config_req.username,
+            user_id=current_user.id,
+            provider=config_req.provider,
+            imap_host=config_req.imap_host,
+            imap_port=config_req.imap_port,
+            use_ssl=config_req.use_ssl,
+            username=config_req.username.strip(),
             password_encrypted=encrypted,
             polling_interval_seconds=config_req.polling_interval_seconds,
             folders_to_monitor=json.dumps(config_req.folders_to_monitor),
             max_attachment_size_mb=config_req.max_attachment_size_mb,
-            auto_quarantine_threshold=config_req.auto_quarantine_threshold)
+            auto_quarantine_threshold=config_req.auto_quarantine_threshold,
+        )
         db.add(config_record)
     db.commit()
-    # Update in-memory worker state WITHOUT passing a plaintext password.
+    db.refresh(config_record)
+
+    # Update in-memory worker state
     email_monitor.update_config(config_record.id, {
-        "is_active": config_record.is_active, "imap_host": config_req.imap_host,
-        "imap_port": config_req.imap_port, "use_ssl": config_req.use_ssl,
-        "username": config_req.username,
-        "folders_to_monitor": json.dumps(config_req.folders_to_monitor),
-        "polling_interval_seconds": config_req.polling_interval_seconds,
-        "max_attachment_size_mb": config_req.max_attachment_size_mb,
-        "auto_quarantine_threshold": config_req.auto_quarantine_threshold,
-        "last_uid": config_record.last_uid or 0})
+        "is_active": config_record.is_active,
+        "imap_host": config_record.imap_host,
+        "imap_port": config_record.imap_port,
+        "use_ssl": config_record.use_ssl,
+        "username": config_record.username,
+        "folders_to_monitor": config_record.folders_to_monitor,
+        "polling_interval_seconds": config_record.polling_interval_seconds,
+        "max_attachment_size_mb": config_record.max_attachment_size_mb,
+        "auto_quarantine_threshold": config_record.auto_quarantine_threshold,
+        "last_uid": config_record.last_uid or 0,
+    })
     return {"status": "success", "message": "Monitoring configuration saved"}
 
 
 @router.post("/monitoring/test-connection")
 def test_connection_endpoint(config_req: Optional[MonitoringConfigRequest] = None,
     db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """Perform a REAL IMAP connection test.
+    """Perform a REAL IMAP connection test for current_user only."""
+    saved = db.query(EmailMonitoringConfig).filter(
+        EmailMonitoringConfig.user_id == current_user.id).first()
 
-    Uses the saved configuration unless an explicit config is provided.
-    Never returns the password.
-    """
     if config_req is None:
-        config = db.query(EmailMonitoringConfig).filter(
-            EmailMonitoringConfig.user_id == current_user.id).first()
-        if not config:
-            return {"status": "NOT_CONFIGURED", "message": "No monitoring configuration found"}
-        imap_host = config.imap_host
-        imap_port = config.imap_port
-        use_ssl = config.use_ssl
-        username = config.username
-        password = decrypt_value(config.password_encrypted or "")
-        folders = json.loads(config.folders_to_monitor) if config.folders_to_monitor else ["INBOX"]
-        provider = config.provider
+        if not saved:
+            return {"status": "NOT_CONFIGURED", "success": False, "message": "No monitoring configuration found. Please enter your email credentials."}
+        imap_host = saved.imap_host
+        imap_port = saved.imap_port
+        use_ssl = saved.use_ssl
+        username = saved.username
+        password = decrypt_value(saved.password_encrypted or "")
+        folders = json.loads(saved.folders_to_monitor) if saved.folders_to_monitor else ["INBOX"]
+        provider = saved.provider
     else:
         imap_host = config_req.imap_host
         imap_port = config_req.imap_port
         use_ssl = config_req.use_ssl
         username = config_req.username
-        password = config_req.password
+        password = (config_req.password or "").strip().replace(" ", "")
         folders = config_req.folders_to_monitor or ["INBOX"]
         provider = config_req.provider
 
-        # If user left password blank to keep current, fall back to saved encrypted password
-        if not password:
-            saved = db.query(EmailMonitoringConfig).filter(
-                EmailMonitoringConfig.user_id == current_user.id).first()
-            if saved and saved.password_encrypted:
-                password = decrypt_value(saved.password_encrypted)
+        if not password and saved and saved.password_encrypted:
+            password = decrypt_value(saved.password_encrypted)
 
-    if password:
-        password = password.strip().replace(" ", "")
+    if not password:
+        return {
+            "status": "FAILED",
+            "success": False,
+            "code": "missing_credentials",
+            "message": "App Password is required. For Gmail, generate a 16-character Google App Password at myaccount.google.com/apppasswords.",
+        }
 
     is_gmail = (
         (provider or "").lower() == "gmail" or
@@ -633,8 +667,19 @@ def test_connection_endpoint(config_req: Optional[MonitoringConfigRequest] = Non
         use_ssl = True
 
     result = test_connection(imap_host, imap_port, use_ssl, username, password, folders)
-    label = "CONNECTED" if result.get("status") == "connected" else "FAILED"
-    return {**result, "status": label}
+    is_ok = result.get("status") == "connected"
+    label = "CONNECTED" if is_ok else "FAILED"
+
+    # If failed and provider is Gmail, ensure clear explanatory message
+    if not is_ok and is_gmail:
+        msg = result.get("message", "")
+        if "Authentication failed" in msg or "AUTHENTICATIONFAILED" in msg or "invalid credentials" in msg.lower():
+            result["message"] = (
+                "Authentication failed. For Gmail, make sure you use a 16-character Google App Password "
+                "(not your standard Google account password) and that 2-Step Verification is enabled on your Google Account."
+            )
+
+    return {**result, "status": label, "success": is_ok}
 
 
 @router.post("/monitoring/start")
@@ -684,29 +729,32 @@ def stop_monitoring(db: Session = Depends(get_db),
 @router.get("/monitoring/status")
 def get_monitoring_status(db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)):
-    """Return real monitoring state backed by the worker + persisted heartbeat."""
-    from datetime import timedelta
+    """Return real monitoring state backed by the worker + persisted heartbeat for current_user."""
     config = db.query(EmailMonitoringConfig).filter(
         EmailMonitoringConfig.user_id == current_user.id).first()
-    base = {
-        "monitor_running": email_monitor.is_running(),
-        "active_configs": len(email_monitor._configs),
-        "configured": config is not None,
-    }
+
     if not config:
-        base.update({
+        return {
+            "monitor_running": email_monitor.is_running(),
+            "configured": False,
+            "has_password": False,
             "monitoring_status": "NOT_CONFIGURED",
             "connection_status": "unknown",
             "worker_running": False,
-            "last_check": None, "last_successful_check": None,
-            "last_error": None, "heartbeat_stale": True,
+            "is_active": False,
+            "last_check": None,
+            "last_successful_check": None,
+            "last_error": None,
+            "heartbeat_stale": True,
             "polling_interval_seconds": None,
-            "emails_checked": 0, "threats_detected": 0, "quarantined_attachments": 0,
-        })
-        return base
+            "username": "",
+            "emails_checked": 0,
+            "threats_detected": 0,
+            "quarantined_attachments": 0,
+        }
 
     worker_running = email_monitor.is_running()
-    configured_active = bool(config.is_active)
+    user_config_active = bool(config.is_active)
     connection_status = (config.connection_status or "unknown").lower()
 
     # heartbeat staleness
@@ -719,20 +767,23 @@ def get_monitoring_status(db: Session = Depends(get_db),
         except Exception:
             heartbeat_stale = True
 
-    if connection_status == "connected" and worker_running and not heartbeat_stale:
+    if connection_status == "connected" and worker_running and not heartbeat_stale and user_config_active:
         monitoring_status = "active"
-    elif config.is_active and worker_running:
+    elif user_config_active and worker_running:
         monitoring_status = "starting"
-    elif config.is_active:
+    elif user_config_active:
         monitoring_status = "error" if connection_status == "error" else "starting"
     else:
         monitoring_status = "stopped"
 
-    base.update({
+    return {
+        "monitor_running": worker_running,
+        "configured": True,
+        "has_password": bool(config.password_encrypted),
         "monitoring_status": monitoring_status,
         "connection_status": connection_status,
         "worker_running": worker_running,
-        "is_active": configured_active,
+        "is_active": user_config_active,
         "last_check": config.last_check.isoformat() if config.last_check else None,
         "last_successful_check": config.last_success_check.isoformat() if config.last_success_check else None,
         "last_error": config.last_error,
@@ -743,8 +794,7 @@ def get_monitoring_status(db: Session = Depends(get_db),
         "emails_checked": config.emails_checked or 0,
         "threats_detected": config.threats_detected or 0,
         "quarantined_attachments": config.quarantined_attachments or 0,
-    })
-    return base
+    }
 
 
 @router.post("/import-email-folder")

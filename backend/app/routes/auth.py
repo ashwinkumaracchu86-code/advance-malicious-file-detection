@@ -1,6 +1,7 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import or_, func
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models.models import User, AuditLog
@@ -35,7 +36,7 @@ def _get_client_ip(request: Request) -> str:
 
 @router.post("/login", response_model=Token)
 def login(request: LoginRequest, req: Request, db: Session = Depends(get_db)):
-    """Authenticate user and return JWT token."""
+    """Authenticate user and return JWT token. Accepts either username or email."""
     client_ip = _get_client_ip(req)
 
     if login_tracker.is_locked_out(client_ip):
@@ -44,7 +45,23 @@ def login(request: LoginRequest, req: Request, db: Session = Depends(get_db)):
             detail="Too many failed login attempts. Please try again later.",
         )
 
-    user = db.query(User).filter(User.username == request.username).first()
+    login_identifier = (request.username or "").strip()
+    if not login_identifier:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username or email is required.",
+        )
+
+    # Allow login by username or email, case-insensitively
+    user = db.query(User).filter(
+        or_(
+            User.username == login_identifier,
+            User.email == login_identifier,
+            func.lower(User.username) == login_identifier.lower(),
+            func.lower(User.email) == login_identifier.lower(),
+        )
+    ).first()
+
     if not user or not verify_password(request.password, user.hashed_password):
         login_tracker.record_failed_attempt(client_ip)
         remaining = login_tracker.get_remaining_attempts(client_ip)
@@ -52,7 +69,7 @@ def login(request: LoginRequest, req: Request, db: Session = Depends(get_db)):
         log = AuditLog(
             user_id=user.id if user else None,
             action="login_failed",
-            details=f"Failed login attempt for username: {request.username} from IP: {client_ip}",
+            details=f"Failed login attempt for identifier: {login_identifier} from IP: {client_ip}",
             result="failure",
         )
         db.add(log)
@@ -123,8 +140,14 @@ def register(user_data: UserCreate, req: Request, db: Session = Depends(get_db))
                 detail={"message": "Password does not meet security requirements", "errors": password_errors},
             )
 
+        clean_username = user_data.username.strip()
+        clean_email = user_data.email.strip().lower()
+
         existing = db.query(User).filter(
-            (User.username == user_data.username) | (User.email == user_data.email)
+            or_(
+                func.lower(User.username) == clean_username.lower(),
+                func.lower(User.email) == clean_email,
+            )
         ).first()
         if existing:
             raise HTTPException(
@@ -136,8 +159,8 @@ def register(user_data: UserCreate, req: Request, db: Session = Depends(get_db))
         logger.info(f"Password hashed OK (prefix={hashed[:20]})")
 
         user = User(
-            username=user_data.username,
-            email=user_data.email,
+            username=clean_username,
+            email=clean_email,
             hashed_password=hashed,
             role=USER_ROLE,
             is_admin=False,

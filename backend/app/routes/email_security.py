@@ -805,18 +805,35 @@ def get_monitoring_status(db: Session = Depends(get_db),
 
 
 @router.post("/import-email-folder")
+@router.post("/load-samples")
+@router.post("/sample-emails")
+@router.post("/samples")
 async def trigger_import_email_folder(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Import and synchronize emails and configuration from the Email/ directory."""
+    """Import and synchronize sample emails and configuration for the current user."""
     try:
-        from import_email_folder import import_email_data
+        try:
+            from import_email_folder import import_email_data
+        except ImportError:
+            try:
+                from backend.import_email_folder import import_email_data
+            except ImportError:
+                import sys, os
+                b_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+                if b_dir not in sys.path:
+                    sys.path.insert(0, b_dir)
+                from import_email_folder import import_email_data
+
         success = import_email_data(target_user_id=current_user.id)
         if not success:
-            raise HTTPException(status_code=500, detail="Failed to import data from Email folder")
+            raise HTTPException(status_code=500, detail="Failed to import sample email data")
         return {"status": "success", "message": "Email data imported successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Failed to import sample email data: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

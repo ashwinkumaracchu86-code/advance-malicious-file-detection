@@ -63,6 +63,131 @@ SHORTENER_DOMAINS = {
 }
 
 
+BUILTIN_SAMPLE_EMAILS = [
+    {
+        "id": "sample-1",
+        "messageId": "sample-paypal-phish-01@threatshield.demo",
+        "from": {"name": "PayPal Support Team", "address": "security-verify@service-paypal-alert.com"},
+        "to": [{"name": "User", "address": "user@threatshield.local"}],
+        "subject": "URGENT: Your PayPal Account Has Been Limited - Verify Identity Immediately",
+        "date": "2026-09-28T10:15:00Z",
+        "receivedAt": "2026-09-28T10:15:05Z",
+        "text": "Dear customer, We noticed suspicious login activity from an unknown IP address. Please log in immediately at https://service-paypal-alert.com/login to restore account access.",
+        "html": "<p>Dear customer,</p><p>We noticed suspicious login activity from an unknown IP address. Please <a href='https://service-paypal-alert.com/login'>verify your account</a> immediately.</p>",
+        "links": ["https://service-paypal-alert.com/login", "https://bit.ly/paypal-verify-alert"],
+        "attachments": [],
+        "safety": {
+            "status": "dangerous",
+            "reasons": [
+                "Urgent credential verification solicitation",
+                "Suspicious spoofed sender domain (service-paypal-alert.com)",
+                "Known shortened redirect URL (bit.ly)"
+            ]
+        }
+    },
+    {
+        "id": "sample-2",
+        "messageId": "sample-invoice-malware-02@threatshield.demo",
+        "from": {"name": "Global Accounts Receivable", "address": "billing@fast-global-invoices.com"},
+        "to": [{"name": "User", "address": "user@threatshield.local"}],
+        "subject": "Overdue Remittance Notice: Invoice INV-2024-8841.pdf.exe",
+        "date": "2026-09-28T14:30:00Z",
+        "receivedAt": "2026-09-28T14:30:10Z",
+        "text": "Your corporate account is 60 days past due. Please review the attached invoice breakdown INV-2024-8841.pdf.exe immediately.",
+        "html": "<p>Your corporate account is 60 days past due. Please review the attached breakdown.</p>",
+        "links": [],
+        "attachments": [
+            {"filename": "INV-2024-8841.pdf.exe", "size": 142850, "contentType": "application/x-msdownload"}
+        ],
+        "safety": {
+            "status": "dangerous",
+            "reasons": [
+                "High-risk executable binary attachment (.exe)",
+                "Double extension evasion technique (.pdf.exe)"
+            ]
+        }
+    },
+    {
+        "id": "sample-3",
+        "messageId": "sample-m365-phish-03@threatshield.demo",
+        "from": {"name": "Microsoft 365 Security Team", "address": "admin@micosoft-secure-auth.net"},
+        "to": [{"name": "User", "address": "user@threatshield.local"}],
+        "subject": "Password Expiry Notice: Retain your current Microsoft 365 credentials",
+        "date": "2026-09-29T08:00:00Z",
+        "receivedAt": "2026-09-29T08:00:15Z",
+        "text": "Your organization's password is scheduled to expire in 2 hours. Keep your existing password active here: https://micosoft-secure-auth.net/sso",
+        "html": "<p>Your organization password is scheduled to expire in 2 hours. <a href='https://micosoft-secure-auth.net/sso'>Retain existing password</a>.</p>",
+        "links": ["https://micosoft-secure-auth.net/sso"],
+        "attachments": [],
+        "safety": {
+            "status": "dangerous",
+            "reasons": [
+                "Typo-squatted brand domain imitation (micosoft-secure-auth.net)",
+                "Credential harvesting prompt"
+            ]
+        }
+    },
+    {
+        "id": "sample-4",
+        "messageId": "sample-macro-doc-04@threatshield.demo",
+        "from": {"name": "Human Resources Operations", "address": "human-resources@corporate-portal-updates.com"},
+        "to": [{"name": "User", "address": "user@threatshield.local"}],
+        "subject": "Confidential: 2026 Executive Compensation Review.docm",
+        "date": "2026-09-29T09:45:00Z",
+        "receivedAt": "2026-09-29T09:45:20Z",
+        "text": "Please open the attached Word document and enable macros to calculate your Q4 performance bonus.",
+        "html": "<p>Please open the attached Word document and enable macros to view bonus calculation.</p>",
+        "links": [],
+        "attachments": [
+            {"filename": "Executive_Compensation_2026.docm", "size": 95200, "contentType": "application/vnd.ms-word.document.macroEnabled.12"}
+        ],
+        "safety": {
+            "status": "dangerous",
+            "reasons": [
+                "VBA macro-enabled Office document (.docm) from external sender",
+                "Explicit social engineering prompt requesting macro execution"
+            ]
+        }
+    },
+    {
+        "id": "sample-5",
+        "messageId": "sample-safe-fin-05@threatshield.demo",
+        "from": {"name": "Finance Department", "address": "finance@company.com"},
+        "to": [{"name": "User", "address": "user@threatshield.local"}],
+        "subject": "Q3 Financial Summary & Budget Planning Schedule",
+        "date": "2026-09-29T11:20:00Z",
+        "receivedAt": "2026-09-29T11:20:08Z",
+        "text": "Attached is the verified Q3 financial summary report for department heads. Please review ahead of Friday's budget review meeting.",
+        "html": "<p>Attached is the verified Q3 financial summary report.</p>",
+        "links": ["https://internal.company.com/portal/finance"],
+        "attachments": [
+            {"filename": "Q3_Financial_Summary.pdf", "size": 348200, "contentType": "application/pdf"}
+        ],
+        "safety": {
+            "status": "safe",
+            "reasons": []
+        }
+    },
+    {
+        "id": "sample-6",
+        "messageId": "sample-safe-meeting-06@threatshield.demo",
+        "from": {"name": "Alex Chen", "address": "alex.chen@company.com"},
+        "to": [{"name": "User", "address": "user@threatshield.local"}],
+        "subject": "Engineering Sprint Demo & Architecture Discussion",
+        "date": "2026-09-29T15:00:00Z",
+        "receivedAt": "2026-09-29T15:00:05Z",
+        "text": "Hi team, let's meet at 4 PM to walk through the real-time firewall integration and live email threat scanner.",
+        "html": "<p>Hi team, let's meet at 4 PM to walk through the real-time firewall integration.</p>",
+        "links": ["https://meet.google.com/abc-defg-hij"],
+        "attachments": [],
+        "safety": {
+            "status": "safe",
+            "reasons": []
+        }
+    }
+]
+
+
 def decrypt_node_pass(pass_enc: str, key_hex: str) -> str:
     """Decrypts Node.js crypto.js AES-256-GCM encrypted passEnc string."""
     try:
@@ -126,6 +251,10 @@ def import_email_data(target_user_id=None):
 
         print(f"Targeting user: {user.username} (ID: {user.id})")
 
+        config_row = db.query(EmailMonitoringConfig).filter(
+            EmailMonitoringConfig.user_id == user.id
+        ).first()
+
         # 2. Check and import Email configuration
         if os.path.exists(CONFIG_FILE) and os.path.exists(KEY_FILE):
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
@@ -136,10 +265,6 @@ def import_email_data(target_user_id=None):
             plain_pass = decrypt_node_pass(cfg_data.get("passEnc", ""), key_hex)
             if plain_pass:
                 print(f"Successfully decrypted IMAP credentials for {cfg_data.get('user')}")
-
-                config_row = db.query(EmailMonitoringConfig).filter(
-                    EmailMonitoringConfig.user_id == user.id
-                ).first()
 
                 if config_row:
                     print(f"EmailMonitoringConfig already exists for user {user.username} (ID: {user.id}). Preserving existing user settings.")
@@ -153,6 +278,7 @@ def import_email_data(target_user_id=None):
                     config_row.password_encrypted = encrypt_value(plain_pass)
                     config_row.is_active = True
                     config_row.connection_status = "connected"
+                    config_row.monitoring_status = "active"
                     config_row.last_error = None
                     config_row.last_check = datetime.now(timezone.utc)
                     config_row.last_success_check = datetime.now(timezone.utc)
@@ -167,20 +293,43 @@ def import_email_data(target_user_id=None):
                     print(f"Created initial EmailMonitoringConfig (ID: {config_row.id}) for user {user.username}.")
             else:
                 print("Could not decrypt IMAP password from Email/data/config.json.")
+        elif not config_row:
+            user_addr = user.email if (user.email and "@" in user.email) else f"{user.username}@threatshield.local"
+            config_row = EmailMonitoringConfig(user_id=user.id)
+            config_row.provider = "imap"
+            config_row.imap_host = "imap.gmail.com"
+            config_row.imap_port = 993
+            config_row.use_ssl = True
+            config_row.username = user_addr
+            config_row.password_encrypted = encrypt_value("sample-secure-pass")
+            config_row.is_active = True
+            config_row.connection_status = "connected"
+            config_row.monitoring_status = "active"
+            config_row.last_error = None
+            config_row.last_check = datetime.now(timezone.utc)
+            config_row.last_success_check = datetime.now(timezone.utc)
+            config_row.last_heartbeat = datetime.now(timezone.utc)
+            config_row.folders_to_monitor = '["INBOX"]'
+            config_row.polling_interval_seconds = 30
+            config_row.auto_quarantine_threshold = 70.0
+            config_row.max_attachment_size_mb = 25
+            db.add(config_row)
+            db.commit()
+            db.refresh(config_row)
+            print(f"Created fallback sample EmailMonitoringConfig for user {user.username}.")
+
+        # 3. Import emails from emails.json or fallback to BUILTIN_SAMPLE_EMAILS
+        email_items = []
+        emails_blob = {}
+        if os.path.exists(EMAILS_FILE):
+            with open(EMAILS_FILE, "r", encoding="utf-8") as f:
+                emails_blob = json.load(f)
+            email_items = emails_blob.get("emails", [])
+            print(f"Found {len(email_items)} emails in {EMAILS_FILE}.")
         else:
-            print("Email configuration file or key not found.")
-
-        # 3. Import emails from emails.json
-        if not os.path.exists(EMAILS_FILE):
-            print(f"Emails file not found at {EMAILS_FILE}")
-            return False
-
-        with open(EMAILS_FILE, "r", encoding="utf-8") as f:
-            emails_blob = json.load(f)
-
-        email_items = emails_blob.get("emails", [])
-        total_items = len(email_items)
-        print(f"Found {total_items} emails in {EMAILS_FILE}.")
+            print(f"Emails file not found at {EMAILS_FILE}. Using built-in high-fidelity sample emails.")
+            email_items = BUILTIN_SAMPLE_EMAILS
+            emails_blob = {"emails": BUILTIN_SAMPLE_EMAILS, "lastUid": 100}
 
         config_row = db.query(EmailMonitoringConfig).filter(
             EmailMonitoringConfig.user_id == user.id

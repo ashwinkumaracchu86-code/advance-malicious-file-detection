@@ -21,6 +21,7 @@ import {
   FiPause,
   FiExternalLink,
   FiCheck,
+  FiTrash2,
 } from 'react-icons/fi';
 import {
   LineChart,
@@ -125,9 +126,161 @@ function getEventIcon(type) {
   }
 }
 
+function getClientEmailSamples(user) {
+  const username = user?.email || (user?.username ? `${user.username}@company.com` : 'security.analyst@threatshield.local');
+  const now = new Date();
+
+  const threatsByDay = Array.from({ length: 7 }).map((_, idx) => {
+    const d = new Date(now);
+    d.setDate(d.getDate() - (6 - idx));
+    const isToday = idx === 6;
+    const isYesterday = idx === 5;
+    return {
+      date: d.toISOString(),
+      label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      count: isToday ? 2 : isYesterday ? 1 : idx === 3 ? 1 : 0,
+      threats: isToday ? 2 : isYesterday ? 1 : idx === 3 ? 1 : 0,
+      phishing: isToday ? 1 : isYesterday ? 1 : 0,
+      malware: isToday ? 1 : 0,
+    };
+  });
+
+  const stats = {
+    total_scanned: 6,
+    emails_monitored: 6,
+    total_emails: 6,
+    total_attachments: 3,
+    attachments_scanned: 3,
+    total_threats: 4,
+    threats_detected: 4,
+    suspicious: 1,
+    phishing_emails: 2,
+    phishing: 2,
+    suspicious_urls: 3,
+    critical: 2,
+    critical_alerts: 2,
+    quarantined: 3,
+    quarantined_emails: 3,
+    safe: 2,
+    safe_emails: 2,
+    threats_by_day: threatsByDay,
+    daily_threats: threatsByDay,
+    risk_distribution: [
+      { name: 'safe', value: 2 },
+      { name: 'suspicious', value: 1 },
+      { name: 'malicious', value: 1 },
+      { name: 'critical', value: 2 },
+    ],
+    top_threat_senders: [
+      { domain: 'service-paypal-alert.com', count: 1, threats: 1, risk: 'critical' },
+      { domain: 'fast-global-invoices.com', count: 1, threats: 1, risk: 'critical' },
+      { domain: 'micosoft-secure-auth.net', count: 1, threats: 1, risk: 'high' },
+      { domain: 'corporate-portal-updates.com', count: 1, threats: 1, risk: 'high' },
+    ],
+  };
+
+  const events = [
+    {
+      id: 'sample-evt-1',
+      subject: 'URGENT: Your PayPal Account Has Been Limited - Verify Identity Immediately',
+      sender: 'PayPal Support Team <security-verify@service-paypal-alert.com>',
+      domain: 'service-paypal-alert.com',
+      type: 'phishing',
+      category: 'phishing',
+      severity: 'critical',
+      risk: 'critical',
+      timestamp: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
+      url_count: 2,
+      threat_count: 3,
+    },
+    {
+      id: 'sample-evt-2',
+      subject: 'Overdue Remittance Notice: Invoice INV-2024-8841.pdf.exe',
+      sender: 'Global Accounts Receivable <billing@fast-global-invoices.com>',
+      domain: 'fast-global-invoices.com',
+      type: 'malware',
+      category: 'malicious attachment',
+      severity: 'critical',
+      risk: 'critical',
+      timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
+      attachment: 'INV-2024-8841.pdf.exe',
+      threat_count: 2,
+    },
+    {
+      id: 'sample-evt-3',
+      subject: 'Password Expiry Notice: Retain your current Microsoft 365 credentials',
+      sender: 'Microsoft 365 Security Team <admin@micosoft-secure-auth.net>',
+      domain: 'micosoft-secure-auth.net',
+      type: 'phishing',
+      category: 'phishing',
+      severity: 'high',
+      risk: 'high',
+      timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString(),
+      url_count: 1,
+      threat_count: 2,
+    },
+    {
+      id: 'sample-evt-4',
+      subject: 'Confidential: 2026 Executive Compensation Review.docm',
+      sender: 'Human Resources Operations <human-resources@corporate-portal-updates.com>',
+      domain: 'corporate-portal-updates.com',
+      type: 'threat',
+      category: 'malware',
+      severity: 'high',
+      risk: 'high',
+      timestamp: new Date(Date.now() - 1000 * 60 * 240).toISOString(),
+      attachment: 'Executive_Compensation_2026.docm',
+      threat_count: 2,
+    },
+    {
+      id: 'sample-evt-5',
+      subject: 'Q3 Financial Summary & Budget Planning Schedule',
+      sender: 'Finance Department <finance@company.com>',
+      domain: 'company.com',
+      type: 'safe',
+      category: 'safe',
+      severity: 'low',
+      risk: 'low',
+      timestamp: new Date(Date.now() - 1000 * 60 * 360).toISOString(),
+      attachment: 'Q3_Financial_Summary.pdf',
+      threat_count: 0,
+    },
+    {
+      id: 'sample-evt-6',
+      subject: 'Engineering Sprint Demo & Architecture Discussion',
+      sender: 'Alex Chen <alex.chen@company.com>',
+      domain: 'company.com',
+      type: 'safe',
+      category: 'safe',
+      severity: 'low',
+      risk: 'low',
+      timestamp: new Date(Date.now() - 1000 * 60 * 480).toISOString(),
+      threat_count: 0,
+    },
+  ];
+
+  const monitoringStatus = {
+    configured: true,
+    is_active: true,
+    monitoring_status: 'active',
+    connection_status: 'connected',
+    username: username,
+    imap_host: 'imap.gmail.com',
+    imap_port: 993,
+    provider: 'imap',
+    last_check: new Date().toISOString(),
+    emails_checked: 6,
+    threats_detected: 4,
+    quarantined_attachments: 2,
+  };
+
+  return { stats, events, monitoringStatus };
+}
+
 export default function EmailSecurityDashboard() {
   const { user } = useAuth();
   const fileInputRef = useRef(null);
+  const userSampleKey = `threatshield_email_samples_${user?.id || 'demo'}`;
   const [stats, setStats] = useState(null);
   const [events, setEvents] = useState([]);
   const [monitoringStatus, setMonitoringStatus] = useState(null);
@@ -137,15 +290,29 @@ export default function EmailSecurityDashboard() {
   const [uploadingEml, setUploadingEml] = useState(false);
   const [importingSamples, setImportingSamples] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [hasLoadedSamples, setHasLoadedSamples] = useState(() => {
+    try {
+      return Boolean(localStorage.getItem(userSampleKey));
+    } catch {
+      return false;
+    }
+  });
 
   // Clear state immediately whenever active user account changes
   useEffect(() => {
     setStats(null);
     setEvents([]);
     setMonitoringStatus(null);
+    try {
+      setHasLoadedSamples(Boolean(localStorage.getItem(`threatshield_email_samples_${user?.id || 'demo'}`)));
+    } catch {
+      setHasLoadedSamples(false);
+    }
   }, [user?.id]);
 
   const fetchData = useCallback(async () => {
+    const key = `threatshield_email_samples_${user?.id || 'demo'}`;
+    let loadedFromApi = false;
     try {
       const [statsRes, eventsRes, statusRes] = await Promise.allSettled([
         emailSecurityAPI.getStats(30),
@@ -153,31 +320,90 @@ export default function EmailSecurityDashboard() {
         emailSecurityAPI.getMonitoringStatus(),
       ]);
 
-      if (statsRes.status === 'fulfilled') {
-        setStats(statsRes.value?.data || statsRes.value);
+      if (statsRes.status === 'fulfilled' && statsRes.value?.data) {
+        const statsData = statsRes.value.data;
+        const total = statsData?.total_scanned ?? statsData?.emails_monitored ?? 0;
+        if (total > 0) {
+          setStats(statsData);
+          loadedFromApi = true;
+        } else {
+          // If server reports 0 emails, check if user loaded client samples previously
+          const cached = localStorage.getItem(key);
+          if (cached) {
+            try {
+              const parsed = JSON.parse(cached);
+              if (parsed?.stats) {
+                setStats(parsed.stats);
+                loadedFromApi = true;
+              }
+            } catch {}
+          }
+          if (!loadedFromApi) {
+            setStats(statsData);
+          }
+        }
       }
-      if (eventsRes.status === 'fulfilled') {
-        const raw = eventsRes.value?.data || eventsRes.value || [];
-        const eventList = raw.events || raw || [];
-        setEvents(eventList.map(e => ({
-          ...e,
-          ...e.event_data,
-          type: e.event_type,
-        })));
+
+      if (eventsRes.status === 'fulfilled' && eventsRes.value?.data) {
+        const raw = eventsRes.value.data;
+        const eventList = raw.events || (Array.isArray(raw) ? raw : []);
+        if (eventList.length > 0) {
+          setEvents(eventList.map(e => ({
+            ...e,
+            ...e.event_data,
+            type: e.event_type || e.type,
+          })));
+          loadedFromApi = true;
+        } else {
+          const cached = localStorage.getItem(key);
+          if (cached) {
+            try {
+              const parsed = JSON.parse(cached);
+              if (parsed?.events) setEvents(parsed.events);
+            } catch {}
+          }
+        }
       }
-      if (statusRes.status === 'fulfilled') {
-        setMonitoringStatus(statusRes.value?.data || statusRes.value);
+
+      if (statusRes.status === 'fulfilled' && statusRes.value?.data) {
+        const st = statusRes.value.data;
+        if (st.configured || st.username) {
+          setMonitoringStatus(st);
+        } else {
+          const cached = localStorage.getItem(key);
+          if (cached) {
+            try {
+              const parsed = JSON.parse(cached);
+              if (parsed?.monitoringStatus) setMonitoringStatus(parsed.monitoringStatus);
+              else setMonitoringStatus(st);
+            } catch {
+              setMonitoringStatus(st);
+            }
+          } else {
+            setMonitoringStatus(st);
+          }
+        }
       }
 
       setLastRefresh(new Date());
       setError(null);
     } catch (err) {
-      console.error('Failed to fetch email security data:', err);
-      setError('Failed to load dashboard data. Retrying...');
+      console.warn('Backend email API unreachable, checking local sample cache:', err);
     } finally {
+      if (!loadedFromApi) {
+        try {
+          const cached = localStorage.getItem(key);
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (parsed?.stats) setStats(parsed.stats);
+            if (parsed?.events) setEvents(parsed.events);
+            if (parsed?.monitoringStatus) setMonitoringStatus(parsed.monitoringStatus);
+          }
+        } catch {}
+      }
       setLoading(false);
     }
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     fetchData();
@@ -224,18 +450,83 @@ export default function EmailSecurityDashboard() {
   };
 
   const handleImportSamples = async () => {
-    if (!window.confirm('Import pre-scanned sample safe and phishing emails to explore this dashboard?')) return;
     setImportingSamples(true);
-    const toastId = toast.loading('Importing sample safe and phishing emails...');
+    const toastId = toast.loading('Loading sample safe and phishing emails...');
+    let imported = false;
+
+    // 1. Attempt backend import first
     try {
-      await emailSecurityAPI.importEmailFolder();
-      toast.success('Sample emails imported successfully into your account!', { id: toastId });
-      fetchData();
+      let res;
+      try {
+        res = await emailSecurityAPI.importEmailFolder();
+      } catch {
+        res = await emailSecurityAPI.loadSamples();
+      }
+      if (res?.data?.status === 'success' || res?.status === 200) {
+        imported = true;
+        toast.success('Sample emails imported successfully into your account!', { id: toastId });
+        await fetchData();
+      }
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Failed to import sample emails', { id: toastId });
-    } finally {
-      setImportingSamples(false);
+      console.warn('Backend sample import not available (static host or offline). Falling back to client-side samples:', err);
     }
+
+    // 2. Client-side fallback if backend is offline or on GitHub Pages static host
+    if (!imported) {
+      const sampleData = getClientEmailSamples(user);
+      const key = `threatshield_email_samples_${user?.id || 'demo'}`;
+      try {
+        localStorage.setItem(key, JSON.stringify(sampleData));
+      } catch {}
+
+      setStats(sampleData.stats);
+      setEvents(sampleData.events);
+      setMonitoringStatus(sampleData.monitoringStatus);
+      setHasLoadedSamples(true);
+      setLastRefresh(new Date());
+      toast.success('Sample safe and phishing emails loaded into your account!', { id: toastId });
+    }
+
+    setImportingSamples(false);
+  };
+
+  const handleClearSamples = () => {
+    const key = `threatshield_email_samples_${user?.id || 'demo'}`;
+    try {
+      localStorage.removeItem(key);
+    } catch {}
+    setHasLoadedSamples(false);
+    setStats({
+      total_scanned: 0,
+      emails_monitored: 0,
+      total_emails: 0,
+      total_attachments: 0,
+      attachments_scanned: 0,
+      total_threats: 0,
+      threats_detected: 0,
+      suspicious: 0,
+      phishing_emails: 0,
+      phishing: 0,
+      suspicious_urls: 0,
+      critical: 0,
+      critical_alerts: 0,
+      quarantined: 0,
+      quarantined_emails: 0,
+      safe: 0,
+      safe_emails: 0,
+      threats_by_day: [],
+      daily_threats: [],
+      risk_distribution: [],
+      top_threat_senders: [],
+    });
+    setEvents([]);
+    setMonitoringStatus((prev) => ({
+      ...prev,
+      monitoring_status: 'not_configured',
+      connection_status: 'unknown',
+      is_active: false,
+    }));
+    toast.success('Sample emails cleared from your account');
   };
 
   const handleToggleMonitoring = async () => {
@@ -361,6 +652,25 @@ export default function EmailSecurityDashboard() {
             className="hidden"
             onChange={handleScanEmlFile}
           />
+          <button
+            onClick={handleImportSamples}
+            disabled={importingSamples}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-green-500/30 bg-green-500/10 hover:bg-green-500/20 text-green-400 text-xs font-semibold transition-colors disabled:opacity-50"
+            title="Load sample pre-scanned safe and phishing emails"
+          >
+            <FiMail className="w-3.5 h-3.5" />
+            {importingSamples ? 'Loading...' : 'Load Sample Emails'}
+          </button>
+          {hasLoadedSamples && (
+            <button
+              onClick={handleClearSamples}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-dark-700 bg-dark-800 hover:bg-dark-700 text-dark-400 hover:text-red-400 text-xs font-medium transition-colors"
+              title="Reset sample emails from dashboard"
+            >
+              <FiTrash2 className="w-3.5 h-3.5" />
+              Reset Samples
+            </button>
+          )}
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploadingEml}

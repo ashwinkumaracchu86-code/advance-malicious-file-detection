@@ -282,7 +282,17 @@ async def lifespan(app: FastAPI):
                 logger.info(f"Auto-started monitoring: {path}")
 
     try:
-        from import_email_folder import import_email_data
+        try:
+            from import_email_folder import import_email_data
+        except ImportError:
+            try:
+                from backend.import_email_folder import import_email_data
+            except ImportError:
+                import sys, os
+                b_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+                if b_dir not in sys.path:
+                    sys.path.insert(0, b_dir)
+                from import_email_folder import import_email_data
         import_email_data()
     except Exception as e:
         logger.warning(f"Could not auto-import from Email folder: {e}")

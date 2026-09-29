@@ -265,3 +265,9 @@ __marimo__/
 
 # Large installer/test binaries (too large for GitHub, kept locally)
 backend/uploads/*.exe
+backend/uploads/*
+!backend/uploads/.gitkeep
+scratch_chrome_cdp*
+screenshot.png
+*.db-shm
+*.db-wal

@@ -249,6 +249,7 @@ export const emailSecurityAPI = {
   startMonitoring: () => api.post('/email-security/monitoring/start'),
   stopMonitoring: () => api.post('/email-security/monitoring/stop'),
   getMonitoringStatus: () => api.get('/email-security/monitoring/status'),
+  importEmailFolder: () => api.post('/email-security/import-email-folder'),
 };
 
 export const settingsAPI = {

@@ -37,14 +37,40 @@ PHISHING_KEYWORDS = [
     "verify your email", "update your payment", "claim your prize",
     "you have won", "congratulations", "lottery", "inheritance",
     "wire transfer", "bank account", "social security", "credit card",
-    "suspended", "locked", "compromised", "unusual sign-in",
+    "suspended", "locked", "compromised", "unusual sign-in", "unusual login",
     "security breach", "confirm your password", "click here immediately",
+    "reactivate your account", "reactivate your mailbox", "final notice",
+    "billing details", "payment declined", "account limited",
+]
+
+PHISHING_REGEXES = [
+    re.compile(r'\bverify\s+(?:your|this)\s+(?:account|identity|email|password|mailbox)\b', re.IGNORECASE),
+    re.compile(r'\baccount\s+(?:will\s+be|has\s+been|is\s+being)\s+(?:suspended|locked|limited|closed|deactivated)\b', re.IGNORECASE),
+    re.compile(r'\bunusual\s+(?:sign[-\s]?in|login)\s+(?:attempt|activity)\b', re.IGNORECASE),
+    re.compile(r'\bconfirm\s+your\s+(?:password|account|identity|payment|details|information)\b', re.IGNORECASE),
+    re.compile(r'\b(?:password|credentials?)\s+(?:expires|expired|reset|required|must\s+be\s+(?:updated|changed))\b', re.IGNORECASE),
+    re.compile(r'\breactivate\s+your\s+(?:account|mailbox)\b', re.IGNORECASE),
+    re.compile(r'\bimmediate\s+action\s+required\b', re.IGNORECASE),
+    re.compile(r'\byou\s+(?:have\s+)?won\b', re.IGNORECASE),
+    re.compile(r'\bclaim\s+your\s+(?:prize|reward|bonus|gift)\b', re.IGNORECASE),
+    re.compile(r'\bfinal\s+notice\b', re.IGNORECASE),
+    re.compile(r'\bupdate\s+your\s+(?:payment|billing|account)\s+(?:details|information)\b', re.IGNORECASE),
+    re.compile(r'\bunauthori[sz]ed\s+(?:access|sign[-\s]?in)\b', re.IGNORECASE),
 ]
 
 SUSPICIOUS_DOMAINS = [
     "bit.ly", "tinyurl.com", "goo.gl", "t.co", "is.gd",
-    "buff.ly", "ow.ly", "shorte.st", "adf.ly",
+    "buff.ly", "ow.ly", "shorte.st", "adf.ly", "cutt.ly", "cutt.us",
+    "rebrand.ly", "shorturl.at", "rb.gy", "tiny.cc", "s.id", "v.gd",
+    "lnkd.in", "bl.ink", "soo.gd", "clk.sh",
 ]
+
+FREEMAIL_DOMAINS = {
+    "gmail.com", "googlemail.com", "yahoo.com", "yahoo.co.uk", "hotmail.com", "outlook.com",
+    "live.com", "msn.com", "icloud.com", "me.com", "aol.com", "protonmail.com", "proton.me",
+    "gmx.com", "gmx.de", "mail.com", "zoho.com", "yandex.com", "mail.ru", "inbox.com",
+    "aim.com", "qq.com", "163.com", "126.com", "rediffmail.com", "rocketmail.com",
+}
 
 SPOOFED_BRANDS = {
     "microsoft": ["microsoft.com", "office.com", "outlook.com", "live.com", "hotmail.com"],
@@ -54,14 +80,46 @@ SPOOFED_BRANDS = {
     "paypal": ["paypal.com"],
     "netflix": ["netflix.com"],
     "facebook": ["facebook.com", "fb.com", "instagram.com"],
+    "instagram": ["instagram.com", "facebook.com"],
+    "whatsapp": ["whatsapp.com"],
+    "linkedin": ["linkedin.com"],
+    "github": ["github.com"],
+    "dropbox": ["dropbox.com"],
+    "adobe": ["adobe.com"],
+    "spotify": ["spotify.com"],
+    "steam": ["steampowered.com", "steamcommunity.com"],
+    "binance": ["binance.com"],
+    "coinbase": ["coinbase.com"],
+    "chase": ["chase.com"],
+    "citibank": ["citi.com", "citibank.com"],
+    "barclays": ["barclays.com", "barclays.co.uk"],
+    "hsbc": ["hsbc.com", "hsbc.co.uk"],
+    "revolut": ["revolut.com"],
+    "dhl": ["dhl.com"],
+    "fedex": ["fedex.com"],
+    "usps": ["usps.com"],
+    "venmo": ["venmo.com"],
+    "cashapp": ["cash.app"],
+    "stripe": ["stripe.com"],
     "bank": ["chase.com", "bankofamerica.com", "wellsfargo.com", "citi.com"],
 }
 
 DANGEROUS_EXT = {
     '.exe', '.dll', '.scr', '.com', '.bat', '.cmd', '.vbs', '.vbe', '.js',
-    '.jse', '.wsf', '.wsh', '.ps1', '.psm1', '.psd1', '.msi', '.pif', '.hta', '.cpl',
-    '.docm', '.xlsm', '.pptm', '.dotm', '.msc', '.msp', '.lnk', '.reg',
+    '.jse', '.wsf', '.wsh', '.ps1', '.psm1', '.psd1', '.msi', '.msp', '.msix',
+    '.appx', '.pif', '.hta', '.cpl', '.jar', '.reg', '.lnk', '.url', '.iso',
+    '.img', '.vhd', '.vhdx', '.apk', '.dex', '.sh', '.run', '.deb', '.rpm',
+    '.gadget', '.chm', '.ws', '.application', '.outlook', '.docm', '.dotm',
+    '.xlsm', '.xltm', '.xlam', '.pptm', '.ppsm', '.potm', '.bin', '.elf',
+    '.so', '.dylib', '.msc',
 }
+
+DECOY_EXTENSIONS = {
+    'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'rtf',
+    'jpg', 'jpeg', 'png', 'gif', 'html', 'htm', 'mp3', 'mp4', 'zip',
+}
+
+OBFUSCATION_PATTERN = re.compile(r'[\u0000-\u001F\u007F\u200E\u200F\u202A-\u202E\u2066-\u2069]')
 
 IMAP_CONNECT_TIMEOUT = 30
 
@@ -132,7 +190,13 @@ def check_display_name_spoofing(display_name: str, email_addr: str) -> List[str]
         if brand in display_lower:
             if email_domain not in legit_domains:
                 reasons.append(f"Display name mentions '{brand}' but sender domain '{email_domain}' is not a legitimate {brand} domain")
-    return reasons
+
+    if email_domain in FREEMAIL_DOMAINS:
+        for brand in SPOOFED_BRANDS.keys():
+            if brand in display_lower and brand not in email_domain:
+                reasons.append(f"Display name claims brand '{brand}' while sending from free mail provider ({email_domain})")
+                break
+    return list(dict.fromkeys(reasons))
 
 
 def analyze_sender(email_addr: str, display_name: str, headers: Dict) -> Dict[str, Any]:
@@ -196,6 +260,13 @@ def analyze_subject(subject: str) -> Dict[str, Any]:
             reasons.append(f"Phishing keyword detected: '{keyword}'")
             score += 8
 
+    for pattern in PHISHING_REGEXES:
+        match = pattern.search(subject)
+        if match:
+            reasons.append(f"Credential/urgency wording in subject: '{match.group(0)}'")
+            score += 15
+            break
+
     if re.search(r'\b(free|winner|congratulations|prize|reward)\b', subject_lower):
         reasons.append("Contains prize/scam language")
         score += 12
@@ -227,6 +298,13 @@ def analyze_body(body_text: str, body_html: str = "") -> Dict[str, Any]:
         if keyword in combined:
             reasons.append(f"Phishing keyword in body: '{keyword}'")
             score += 5
+
+    for pattern in PHISHING_REGEXES:
+        match = pattern.search(combined)
+        if match:
+            reasons.append(f"Credential/urgency wording in body: '{match.group(0)}'")
+            score += 10
+            break
 
     url_pattern = re.compile(r'href=["\']([^"\']+)["\']', re.IGNORECASE)
     html_urls = url_pattern.findall(body_html or "")
@@ -471,6 +549,14 @@ def analyze_attachment(
         parts = filename.split(".")
         if len(parts) > 2:
             reasons.append(f"Double extension: {filename}")
+            last = parts[-1].lower()
+            decoy = parts[-2].lower()
+            if (f".{last}" in DANGEROUS_EXT or last in DANGEROUS_EXT) and decoy in DECOY_EXTENSIONS:
+                reasons.append(f"Deceptive double extension: .{last} hidden behind .{decoy}")
+                classification = "malicious"
+        if OBFUSCATION_PATTERN.search(filename):
+            reasons.append(f"Obfuscated filename containing hidden control characters")
+            classification = "suspicious" if classification == "safe" else classification
         if result.get("is_suspicious_mime"):
             reasons.append(f"Suspicious MIME type: {result.get('mime_type', '')}")
         if result.get("extension_matches_mime") is False:
@@ -532,20 +618,45 @@ def analyze_attachment(
     return base
 
 
-def _safe_error_message(exception: Exception) -> str:
+def _safe_error_message(exception: Exception, password: str = "") -> str:
     """Convert IMAP exceptions into user-safe messages without leaking credentials."""
     text = str(exception)
     user_msg = "Mailbox check failed"
     try:
         lowered = text.lower()
+        clean_pw = (password or "").strip().replace(" ", "")
+        is_standard_account_password = bool(
+            clean_pw and (
+                any(c.isupper() for c in clean_pw) or
+                any(c.isdigit() for c in clean_pw) or
+                any(c in "!@#$%^&*()_+-=[]{}|;':\",./<>?`~" for c in clean_pw) or
+                len(clean_pw) != 16
+            )
+        )
         if "authentication" in lowered and ("invalid" in lowered or "failed" in lowered or "failure" in lowered):
-            user_msg = "Authentication failed. Verify the email address and App Password, and confirm IMAP access is enabled for the account."
-        elif "username or password" in lowered:
-            user_msg = "Authentication failed. Verify the email address and App Password."
-        elif "log in via your web browser" in lowered or "oauth" in lowered or "less secure" in lowered:
-            user_msg = "Sign-in blocked by the provider. Use an App Password (requires two-step verification to be enabled)."
+            if is_standard_account_password:
+                user_msg = (
+                    "Authentication failed: You entered your standard Google account password. "
+                    "Google strictly blocks personal passwords on IMAP for security. You MUST use a 16-letter "
+                    "Google App Password generated from your Google Account (myaccount.google.com/apppasswords)."
+                )
+            else:
+                user_msg = (
+                    "Authentication failed. For Gmail, make sure you use a 16-character Google App Password "
+                    "(not your standard Google account password) and that 2-Step Verification is enabled on your Google Account."
+                )
+        elif "username or password" in lowered or "badcredentials" in lowered or "invalid credentials" in lowered:
+            if is_standard_account_password:
+                user_msg = (
+                    "Authentication failed: Personal account password entered. "
+                    "Google requires a 16-letter App Password generated at myaccount.google.com/apppasswords."
+                )
+            else:
+                user_msg = "Authentication failed. Verify you are using your full Gmail address and a 16-character Google App Password (spaces removed)."
+        elif "log in via your web browser" in lowered or "oauth" in lowered or "less secure" in lowered or "application-specific" in lowered:
+            user_msg = "Sign-in blocked by Google. Google requires a 16-character App Password (go to myaccount.google.com/apppasswords with 2-Step Verification enabled)."
         elif "login" in lowered and "denied" in lowered:
-            user_msg = "Login denied by the mail provider."
+            user_msg = "Login denied by the mail provider. Check your Google App Password and account settings."
         elif "timed out" in lowered or "timeout" in lowered or "timedout" in lowered:
             user_msg = "Connection to the mail server timed out."
         elif "connection refused" in lowered or "connection reset" in lowered:
@@ -837,6 +948,21 @@ class EmailMonitor:
         username = config.get("username")
         password = decrypt_value(config.get("password", ""))
         use_ssl = bool(config.get("use_ssl", True))
+        if password:
+            password = password.strip().replace(" ", "")
+
+        is_gmail = (
+            (config.get("provider") or "").lower() == "gmail" or
+            (username or "").lower().endswith("@gmail.com") or
+            (username or "").lower().endswith("@googlemail.com") or
+            "@" in (host or "") or
+            "gmail" in (host or "").lower()
+        )
+        if is_gmail:
+            host = "imap.gmail.com"
+            port = 993
+            use_ssl = True
+
         try:
             folders = json.loads(config.get("folders_to_monitor", '["INBOX"]'))
         except Exception:
@@ -865,7 +991,7 @@ class EmailMonitor:
             try:
                 mail.login(username, password)
             except imaplib.IMAP4.error as exc:
-                self._set_connection_error(config_id, _safe_error_message(exc))
+                self._set_connection_error(config_id, _safe_error_message(exc, password=password))
                 return
 
             processed_uids = self._get_processed_uids(config_id)
@@ -1328,6 +1454,20 @@ def test_connection(
     folders: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """Test an IMAP connection without storing or logging the password."""
+    if password:
+        password = password.strip().replace(" ", "")
+
+    is_gmail = (
+        (username or "").lower().endswith("@gmail.com") or
+        (username or "").lower().endswith("@googlemail.com") or
+        "@" in (imap_host or "") or
+        "gmail" in (imap_host or "").lower()
+    )
+    if is_gmail:
+        imap_host = "imap.gmail.com"
+        imap_port = 993
+        use_ssl = True
+
     if not imap_host or not username or not password:
         return {"status": "failed", "code": "incomplete_config",
                 "message": "Host, username and password are required."}
@@ -1351,7 +1491,7 @@ def test_connection(
         try:
             mail.login(username, password)
         except imaplib.IMAP4.error as exc:
-            return {"status": "failed", "code": "auth_failed", "message": _safe_error_message(exc), "server": imap_host}
+            return {"status": "failed", "code": "auth_failed", "message": _safe_error_message(exc, password=password), "server": imap_host}
 
         checked = []
         for folder in (folders or ["INBOX"]):

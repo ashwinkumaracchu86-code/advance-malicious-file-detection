@@ -190,6 +190,12 @@ async def lifespan(app: FastAPI):
                 folder_monitor.start_monitoring(path)
                 logger.info(f"Auto-started monitoring: {path}")
 
+    try:
+        from import_email_folder import import_email_data
+        import_email_data()
+    except Exception as e:
+        logger.warning(f"Could not auto-import from Email folder: {e}")
+
     from .services.email_monitor_service import email_monitor
     from .models.email_models import EmailMonitoringConfig
     db = SessionLocal()

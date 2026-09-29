@@ -1,6 +1,12 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+const htmlBypass = (req) => {
+  if (req.headers.accept?.includes('text/html')) {
+    return '/index.html';
+  }
+};
+
 export default defineConfig(({ command }) => ({
   base: command === 'serve' ? '/' : '/advance-malicious-file-detection/',
   plugins: [react()],
@@ -26,10 +32,12 @@ export default defineConfig(({ command }) => ({
       '/dashboard': {
         target: 'http://localhost:8000',
         changeOrigin: true,
+        bypass: htmlBypass,
       },
       '/quarantine': {
         target: 'http://localhost:8000',
         changeOrigin: true,
+        bypass: htmlBypass,
       },
       '/reports': {
         target: 'http://localhost:8000',
@@ -82,6 +90,7 @@ export default defineConfig(({ command }) => ({
       '/email-security': {
         target: 'http://localhost:8000',
         changeOrigin: true,
+        bypass: htmlBypass,
       },
       '/admin': {
         target: 'http://localhost:8000',

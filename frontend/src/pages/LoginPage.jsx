@@ -108,7 +108,7 @@ function AnimatedBackground() {
 }
 
 export default function LoginPage() {
-  const [loginType, setLoginType] = useState(null);
+  const [loginType, setLoginType] = useState('user');
   const [isRegister, setIsRegister] = useState(false);
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -118,6 +118,24 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const navigate = useNavigate();
   const { login } = useAuth();
+
+  const quickLogin = async (u, p) => {
+    setUsername(u);
+    setPassword(p);
+    setError('');
+    setLoading(true);
+    try {
+      await login(u, p);
+      toast.success(`Signed in as ${u}`);
+      navigate('/dashboard');
+    } catch (err) {
+      const msg = err.response?.data?.detail || err.message || 'Login failed';
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const passwordChecks = useMemo(() => ({
     length: password.length >= 8,
@@ -392,6 +410,35 @@ export default function LoginPage() {
                 </>
               )}
             </button>
+
+            {!isRegister && (
+              <div className="pt-3 border-t border-slate-700/40 mt-3">
+                <p className="text-xs text-slate-400 mb-2 font-medium flex items-center justify-between">
+                  <span>⚡ 1-Click Fast Login:</span>
+                  <span className="text-[11px] text-cyan-400">Pre-configured</span>
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={() => quickLogin('Ashwin_gowda1', 'Ashwin@gowda1234')}
+                    className="px-2.5 py-2 bg-cyan-950/70 hover:bg-cyan-900/80 border border-cyan-500/40 text-cyan-300 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-sm"
+                  >
+                    <FiUser className="w-3.5 h-3.5 text-cyan-400" />
+                    Ashwin_gowda1
+                  </button>
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={() => quickLogin('anush', 'password123')}
+                    className="px-2.5 py-2 bg-slate-800/80 hover:bg-slate-750 border border-slate-600/50 text-slate-300 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition-all shadow-sm"
+                  >
+                    <FiUser className="w-3.5 h-3.5 text-slate-400" />
+                    anush
+                  </button>
+                </div>
+              </div>
+            )}
           </form>
 
           <div className="mt-6 pt-5 border-t border-slate-700/50 text-center">

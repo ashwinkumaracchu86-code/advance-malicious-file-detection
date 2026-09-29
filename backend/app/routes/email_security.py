@@ -526,6 +526,23 @@ def get_monitoring_config(db: Session = Depends(get_db),
 @router.post("/monitoring/config")
 def save_monitoring_config(config_req: MonitoringConfigRequest, db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)):
+    # Auto-sanitize password (e.g. Google App Passwords copied with 4-space chunks like 'abcd efgh ijkl mnop')
+    if config_req.password:
+        config_req.password = config_req.password.strip().replace(" ", "")
+
+    # Auto-correct and enforce Gmail IMAP host and SSL settings
+    is_gmail = (
+        (config_req.provider or "").lower() == "gmail" or
+        config_req.username.lower().endswith("@gmail.com") or
+        config_req.username.lower().endswith("@googlemail.com") or
+        "@" in config_req.imap_host
+    )
+    if is_gmail:
+        config_req.provider = "gmail"
+        config_req.imap_host = "imap.gmail.com"
+        config_req.imap_port = 993
+        config_req.use_ssl = True
+
     if config_req.password and not config_req.password.startswith("enc:"):
         encrypted = encrypt_value(config_req.password)
     else:
@@ -584,6 +601,7 @@ def test_connection_endpoint(config_req: Optional[MonitoringConfigRequest] = Non
         username = config.username
         password = decrypt_value(config.password_encrypted or "")
         folders = json.loads(config.folders_to_monitor) if config.folders_to_monitor else ["INBOX"]
+        provider = config.provider
     else:
         imap_host = config_req.imap_host
         imap_port = config_req.imap_port
@@ -591,6 +609,28 @@ def test_connection_endpoint(config_req: Optional[MonitoringConfigRequest] = Non
         username = config_req.username
         password = config_req.password
         folders = config_req.folders_to_monitor or ["INBOX"]
+        provider = config_req.provider
+
+        # If user left password blank to keep current, fall back to saved encrypted password
+        if not password:
+            saved = db.query(EmailMonitoringConfig).filter(
+                EmailMonitoringConfig.user_id == current_user.id).first()
+            if saved and saved.password_encrypted:
+                password = decrypt_value(saved.password_encrypted)
+
+    if password:
+        password = password.strip().replace(" ", "")
+
+    is_gmail = (
+        (provider or "").lower() == "gmail" or
+        (username or "").lower().endswith("@gmail.com") or
+        (username or "").lower().endswith("@googlemail.com") or
+        "@" in (imap_host or "")
+    )
+    if is_gmail:
+        imap_host = "imap.gmail.com"
+        imap_port = 993
+        use_ssl = True
 
     result = test_connection(imap_host, imap_port, use_ssl, username, password, folders)
     label = "CONNECTED" if result.get("status") == "connected" else "FAILED"
@@ -705,6 +745,121 @@ def get_monitoring_status(db: Session = Depends(get_db),
         "quarantined_attachments": config.quarantined_attachments or 0,
     })
     return base
+
+
+@router.post("/import-email-folder")
+async def trigger_import_email_folder(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Import and synchronize emails and configuration from the Email/ directory."""
+    try:
+        from import_email_folder import import_email_data
+        success = import_email_data()
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to import data from Email folder")
+        return {"status": "success", "message": "Email data imported successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+@router.post("/sync-raw")
+async def sync_raw_email(
+    payload: dict,
+    db: Session = Depends(get_db),
+):
+    """Webhook for Node.js Email monitor to sync incoming emails directly into ThreatShield."""
+    msg_id = payload.get("messageId") or f"synced-{payload.get('id', str(uuid.uuid4()))}"
+    existing = db.query(EmailRecord).filter(
+        (EmailRecord.message_id == msg_id) | (EmailRecord.message_id == payload.get("id"))
+    ).first()
+    if existing:
+        return {"status": "exists", "id": existing.id}
+
+    user = db.query(User).filter(User.id == 1).first() or db.query(User).first()
+    user_id = user.id if user else 1
+
+    from_obj = payload.get("from") or {}
+    sender_addr = from_obj.get("address", "")
+    sender_name = from_obj.get("name", "")
+    sender_full = f"{sender_name} <{sender_addr}>" if sender_name and sender_addr else (sender_addr or sender_name or "unknown@domain.com")
+    sender_domain = sender_addr.split("@")[-1].lower() if "@" in sender_addr else ""
+
+    receiver = payload.get("receiver") or ""
+    if not receiver and payload.get("to"):
+        receiver = payload["to"][0].get("address", "")
+
+    safety = payload.get("safety") or {}
+    status = safety.get("status", "safe")
+    reasons = safety.get("reasons", [])
+
+    if status == "dangerous":
+        risk_score = 75.0
+        classification = "malicious"
+    elif status == "unknown":
+        risk_score = 25.0
+        classification = "suspicious"
+    else:
+        risk_score = 0.0
+        classification = "safe"
+
+    is_quarantined = (classification in ("critical", "malicious"))
+    now = datetime.now(timezone.utc)
+
+    email_rec = EmailRecord(
+        message_id=msg_id,
+        user_id=user_id,
+        sender=sender_full,
+        sender_domain=sender_domain,
+        recipient=receiver,
+        subject=payload.get("subject", "(no subject)"),
+        date_received=now,
+        body_text=payload.get("text", ""),
+        body_html=payload.get("html", ""),
+        raw_headers=json.dumps({"from": sender_full, "to": receiver, "subject": payload.get("subject")}),
+        risk_score=risk_score,
+        classification=classification,
+        is_quarantined=is_quarantined,
+        is_read=False,
+        scan_date=now,
+        scan_duration_ms=100,
+        total_attachments=len(payload.get("attachments", [])),
+        threat_count=len(reasons) if status == "dangerous" else 0,
+        url_count=len(payload.get("links", [])),
+        spam_score=0.0,
+        phishing_score=risk_score,
+        spf="PASS" if status != "dangerous" else "NEUTRAL",
+        dkim="PASS" if status != "dangerous" else "NEUTRAL",
+        dmarc="PASS" if status != "dangerous" else "NEUTRAL",
+        scan_source="imap",
+    )
+    db.add(email_rec)
+    db.flush()
+
+    _store_event(db, email_rec.id, "email_received", {"subject": email_rec.subject, "from": email_rec.sender}, "imap")
+    _store_event(db, email_rec.id, "risk_calculated", {"risk_score": risk_score, "classification": classification}, "system")
+
+    if is_quarantined:
+        _store_event(db, email_rec.id, "email_quarantined", {"reason": "; ".join(reasons)}, "system")
+        _create_alert(db, email_rec.id, user_id, "threat_detected", "critical" if risk_score >= 80 else "high",
+                      f"Malicious Email: {email_rec.subject}", f"Threat detected from {sender_full}: {'; '.join(reasons)}")
+        db.add(EmailQuarantine(
+            email_id=email_rec.id, user_id=user_id, status="quarantined",
+            risk_score=risk_score, classification=classification,
+            reason="; ".join(reasons) if reasons else "High risk detected",
+            created_at=now,
+        ))
+
+    db.commit()
+    email_monitor._notify("email_received", {
+        "id": email_rec.id,
+        "subject": email_rec.subject,
+        "sender": email_rec.sender,
+        "classification": classification,
+        "risk_score": risk_score,
+    })
+    return {"status": "synced", "id": email_rec.id}
 
 
 @router.websocket("/ws/events")

@@ -1,5 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
+import { useAuth } from '../context/AuthContext';
 import { emailSecurityAPI } from '../services/api';
 import {
   FiMail,
@@ -14,6 +16,11 @@ import {
   FiLink,
   FiServer,
   FiSettings,
+  FiUpload,
+  FiPlay,
+  FiPause,
+  FiExternalLink,
+  FiCheck,
 } from 'react-icons/fi';
 import {
   LineChart,
@@ -119,13 +126,24 @@ function getEventIcon(type) {
 }
 
 export default function EmailSecurityDashboard() {
-  const navigate = useNavigate();
+  const { user } = useAuth();
+  const fileInputRef = useRef(null);
   const [stats, setStats] = useState(null);
   const [events, setEvents] = useState([]);
   const [monitoringStatus, setMonitoringStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastRefresh, setLastRefresh] = useState(null);
+  const [uploadingEml, setUploadingEml] = useState(false);
+  const [importingSamples, setImportingSamples] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+
+  // Clear state immediately whenever active user account changes
+  useEffect(() => {
+    setStats(null);
+    setEvents([]);
+    setMonitoringStatus(null);
+  }, [user?.id]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -167,8 +185,76 @@ export default function EmailSecurityDashboard() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
-  const isMonitoring = monitoringStatus?.monitor_running ?? monitoringStatus?.is_active ?? monitoringStatus?.active ?? false;
+  // Precise monitoring calculation for THIS user
+  const configured = Boolean(monitoringStatus?.configured || monitoringStatus?.username);
+  const isActive = Boolean(monitoringStatus?.is_active);
+  const monStatus = (monitoringStatus?.monitoring_status || '').toLowerCase();
+  const connStatus = (monitoringStatus?.connection_status || '').toLowerCase();
+  const lastError = monitoringStatus?.last_error;
+
+  const isMonitoring = isActive && (monStatus === 'active' || connStatus === 'connected');
+  const isConnecting = isActive && (monStatus === 'starting' || (!lastError && connStatus === 'unknown'));
+  const isError = monStatus === 'error' || connStatus === 'error' || Boolean(lastError);
+  const isPaused = configured && !isActive;
+  const isNotConfigured = !configured || monStatus === 'not_configured';
   const monitorLastCheck = monitoringStatus?.last_check || monitoringStatus?.last_check_at || null;
+
+  const handleScanEmlFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.eml')) {
+      toast.error('Please select an email file (.eml)');
+      return;
+    }
+    const formData = new FormData();
+    formData.append('file', file);
+    setUploadingEml(true);
+    const toastId = toast.loading('Analyzing email headers, attachments, and URLs...');
+    try {
+      const res = await emailSecurityAPI.scan(formData);
+      const classification = res.data?.classification || 'analyzed';
+      toast.success(`Email scanned successfully! Classification: ${classification.toUpperCase()}`, { id: toastId });
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to scan email', { id: toastId });
+    } finally {
+      setUploadingEml(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleImportSamples = async () => {
+    if (!window.confirm('Import pre-scanned sample safe and phishing emails to explore this dashboard?')) return;
+    setImportingSamples(true);
+    const toastId = toast.loading('Importing sample safe and phishing emails...');
+    try {
+      await emailSecurityAPI.importEmailFolder();
+      toast.success('Sample emails imported successfully into your account!', { id: toastId });
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to import sample emails', { id: toastId });
+    } finally {
+      setImportingSamples(false);
+    }
+  };
+
+  const handleToggleMonitoring = async () => {
+    setActionLoading(true);
+    try {
+      if (isMonitoring) {
+        await emailSecurityAPI.stopMonitoring();
+        toast.success('Email monitoring paused');
+      } else {
+        await emailSecurityAPI.startMonitoring();
+        toast.success('Email monitoring started');
+      }
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to update monitoring status');
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   const threatsByDay = (() => {
     if (stats?.threats_by_day && Array.isArray(stats.threats_by_day)) {
@@ -263,11 +349,27 @@ export default function EmailSecurityDashboard() {
         </div>
         <div className="flex items-center gap-3">
           {lastRefresh && (
-            <span className="text-dark-400 text-xs flex items-center gap-1.5">
+            <span className="text-dark-400 text-xs flex items-center gap-1.5 hidden sm:inline-flex">
               <FiClock className="w-3.5 h-3.5" />
               Updated {formatTimestamp(lastRefresh)}
             </span>
           )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".eml"
+            className="hidden"
+            onChange={handleScanEmlFile}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploadingEml}
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 text-xs font-semibold transition-colors disabled:opacity-50"
+            title="Upload and scan an email (.eml) file"
+          >
+            <FiUpload className="w-3.5 h-3.5" />
+            {uploadingEml ? 'Scanning...' : 'Scan .EML'}
+          </button>
           <button
             onClick={fetchData}
             className="p-2 rounded-lg border border-dark-700 bg-dark-800 text-dark-400 hover:text-dark-100 hover:border-dark-600 transition-colors"
@@ -288,66 +390,163 @@ export default function EmailSecurityDashboard() {
 
       {/* Monitoring Status Banner */}
       <div
-        className={`rounded-lg px-5 py-4 flex items-center justify-between border ${
+        className={`rounded-lg px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border transition-all ${
           isMonitoring
             ? 'bg-green-500/10 border-green-500/30'
-            : 'bg-red-500/10 border-red-500/30'
+            : isError
+            ? 'bg-red-500/10 border-red-500/30'
+            : isConnecting
+            ? 'bg-yellow-500/10 border-yellow-500/30'
+            : isPaused
+            ? 'bg-amber-500/10 border-amber-500/30'
+            : 'bg-cyan-500/10 border-cyan-500/30'
         }`}
       >
         <div className="flex items-center gap-3">
           <div
-            className={`relative flex items-center justify-center w-3 h-3 rounded-full ${
-              isMonitoring ? 'bg-green-400' : 'bg-red-500'
+            className={`relative flex items-center justify-center w-3 h-3 rounded-full shrink-0 ${
+              isMonitoring
+                ? 'bg-green-400'
+                : isError
+                ? 'bg-red-500'
+                : isConnecting
+                ? 'bg-yellow-400'
+                : isPaused
+                ? 'bg-amber-400'
+                : 'bg-cyan-400'
             }`}
           >
-            <span
-              className={`absolute inline-flex w-full h-full rounded-full opacity-75 animate-ping ${
-                isMonitoring ? 'bg-green-400' : 'bg-red-500'
-              }`}
-            />
+            {(isMonitoring || isConnecting) && (
+              <span
+                className={`absolute inline-flex w-full h-full rounded-full opacity-75 animate-ping ${
+                  isMonitoring ? 'bg-green-400' : 'bg-yellow-400'
+                }`}
+              />
+            )}
             <span
               className={`relative inline-flex w-3 h-3 rounded-full ${
-                isMonitoring ? 'bg-green-400' : 'bg-red-500'
+                isMonitoring
+                  ? 'bg-green-400'
+                  : isError
+                  ? 'bg-red-500'
+                  : isConnecting
+                  ? 'bg-yellow-400'
+                  : isPaused
+                  ? 'bg-amber-400'
+                  : 'bg-cyan-400'
               }`}
             />
           </div>
           <FiServer
-            className={`w-4 h-4 ${
-              isMonitoring ? 'text-green-400' : 'text-red-400'
+            className={`w-4 h-4 shrink-0 ${
+              isMonitoring
+                ? 'text-green-400'
+                : isError
+                ? 'text-red-400'
+                : isConnecting
+                ? 'text-yellow-400'
+                : isPaused
+                ? 'text-amber-400'
+                : 'text-cyan-400'
             }`}
           />
-          <span
-            className={`text-sm font-semibold ${
-              isMonitoring ? 'text-green-400' : 'text-red-400'
-            }`}
-          >
-            Email Monitoring:{' '}
-            {isMonitoring ? 'ACTIVE' : 'OFFLINE'}
-          </span>
-          {!isMonitoring && (
-            <span className="text-dark-400 text-xs ml-1">
-              — Configure IMAP settings to start monitoring
-            </span>
-          )}
+          <div>
+            <div className="flex items-center gap-2">
+              <span
+                className={`text-sm font-semibold ${
+                  isMonitoring
+                    ? 'text-green-400'
+                    : isError
+                    ? 'text-red-400'
+                    : isConnecting
+                    ? 'text-yellow-400'
+                    : isPaused
+                    ? 'text-amber-400'
+                    : 'text-cyan-400'
+                }`}
+              >
+                Email Monitoring:{' '}
+                {isMonitoring
+                  ? 'ACTIVE'
+                  : isError
+                  ? 'CONNECTION ERROR'
+                  : isConnecting
+                  ? 'CONNECTING'
+                  : isPaused
+                  ? 'PAUSED'
+                  : 'NOT CONFIGURED'}
+              </span>
+              {isMonitoring && (
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-500/20 text-green-400 border border-green-500/30">
+                  LIVE
+                </span>
+              )}
+            </div>
+            <p className="text-dark-400 text-xs mt-0.5">
+              {isMonitoring
+                ? `Actively monitoring ${monitoringStatus?.username || 'inbox'} — polling every ${monitoringStatus?.polling_interval_seconds || 60}s`
+                : isError
+                ? (lastError || 'Authentication failed. Please verify your Google App Password in Email Settings.')
+                : isConnecting
+                ? 'Establishing secure IMAP connection to mail server...'
+                : isPaused
+                ? 'Monitoring is currently paused for this account.'
+                : 'Connect your Gmail account (or IMAP) with a Google App Password to enable automated inbox scanning.'}
+            </p>
+          </div>
         </div>
-        <div className="flex items-center gap-4">
-          {monitorLastCheck && (
-            <span className="text-dark-400 text-xs flex items-center gap-1.5">
+
+        <div className="flex items-center gap-3 shrink-0">
+          {monitorLastCheck && isMonitoring && (
+            <span className="text-dark-400 text-xs flex items-center gap-1.5 hidden md:inline-flex">
               <FiActivity className="w-3.5 h-3.5" />
               Last check: {formatTimestamp(monitorLastCheck)}
             </span>
           )}
           {isMonitoring ? (
-            <span className="px-2.5 py-1 rounded text-xs font-medium bg-green-500/15 text-green-400 border border-green-500/30">
-              LIVE
-            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => navigate('/email-live-monitor')}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-dark-800 hover:bg-dark-700 text-dark-200 border border-dark-700 rounded-lg text-xs font-medium transition-colors"
+              >
+                <FiActivity className="w-3.5 h-3.5 text-cyan-400" />
+                Live Feed
+              </button>
+              <button
+                onClick={() => navigate('/email-settings')}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-dark-800 hover:bg-dark-700 text-dark-300 border border-dark-700 rounded-lg text-xs font-medium transition-colors"
+              >
+                <FiSettings className="w-3.5 h-3.5" />
+                Settings
+              </button>
+            </div>
+          ) : isPaused ? (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleToggleMonitoring}
+                disabled={actionLoading}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-green-600 hover:bg-green-500 text-white rounded-lg text-xs font-medium transition-colors"
+              >
+                <FiPlay className="w-3.5 h-3.5" />
+                {actionLoading ? 'Starting...' : 'Resume'}
+              </button>
+              <button
+                onClick={() => navigate('/email-settings')}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-dark-800 hover:bg-dark-700 text-dark-300 border border-dark-700 rounded-lg text-xs font-medium transition-colors"
+              >
+                <FiSettings className="w-3.5 h-3.5" />
+                Settings
+              </button>
+            </div>
           ) : (
             <button
               onClick={() => navigate('/email-settings')}
-              className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg text-sm font-medium transition-colors"
+              className={`flex items-center gap-2 px-4 py-2 text-white rounded-lg text-xs font-semibold transition-colors ${
+                isError ? 'bg-red-600 hover:bg-red-700 shadow-md shadow-red-900/30' : 'bg-cyan-600 hover:bg-cyan-700 shadow-md shadow-cyan-900/30'
+              }`}
             >
-              <FiSettings className="w-4 h-4" />
-              Configure Now
+              <FiSettings className="w-3.5 h-3.5" />
+              {isError ? 'Fix in Email Settings' : 'Configure Mailbox'}
             </button>
           )}
         </div>
@@ -404,6 +603,57 @@ export default function EmailSecurityDashboard() {
           color="bg-green-500/15 border border-green-500/30"
         />
       </div>
+
+      {/* Empty-State Action Banner when 0 emails monitored */}
+      {emailsMonitored === 0 && (
+        <div className="bg-dark-800/80 border border-dark-700 rounded-xl p-6 shadow-lg">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="space-y-2 text-center md:text-left">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                <FiShield className="w-3.5 h-3.5" />
+                Multi-User Isolated Email Security
+              </div>
+              <h3 className="text-lg font-bold text-dark-100">
+                No Monitored Emails Yet in This Account
+              </h3>
+              <p className="text-dark-400 text-sm max-w-xl">
+                Each account's email security data is strictly separated. To start monitoring and see your safe and suspicious emails:
+              </p>
+              <ul className="text-xs text-dark-300 space-y-1 list-disc list-inside">
+                <li><strong>Automated:</strong> Connect your mailbox in Email Settings with your email and 16-character Google App Password.</li>
+                <li><strong>Direct Scan:</strong> Click "Upload & Scan .EML" to scan any exported email file instantly.</li>
+                <li><strong>Demo:</strong> Load sample pre-scanned emails into your account to test the dashboard.</li>
+              </ul>
+            </div>
+
+            <div className="flex flex-col sm:flex-row md:flex-col gap-2.5 w-full md:w-auto shrink-0">
+              <button
+                onClick={() => navigate('/email-settings')}
+                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-semibold transition-all shadow-md shadow-cyan-900/30"
+              >
+                <FiSettings className="w-4 h-4" />
+                Configure Mailbox
+              </button>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingEml}
+                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-dark-700 hover:bg-dark-600 text-dark-100 border border-dark-600 rounded-lg text-sm font-medium transition-colors"
+              >
+                <FiUpload className="w-4 h-4 text-cyan-400" />
+                {uploadingEml ? 'Scanning Email...' : 'Upload & Scan .EML'}
+              </button>
+              <button
+                onClick={handleImportSamples}
+                disabled={importingSamples}
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-dark-800 hover:bg-dark-700 text-dark-300 border border-dark-700 rounded-lg text-xs font-medium transition-colors"
+              >
+                <FiMail className="w-3.5 h-3.5 text-green-400" />
+                {importingSamples ? 'Importing Samples...' : 'Load Sample Emails'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

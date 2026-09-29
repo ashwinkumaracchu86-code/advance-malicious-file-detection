@@ -604,6 +604,8 @@ def save_monitoring_config(config_req: MonitoringConfigRequest, db: Session = De
 
     # Update in-memory worker state
     email_monitor.update_config(config_record.id, {
+        "id": config_record.id,
+        "user_id": config_record.user_id,
         "is_active": config_record.is_active,
         "imap_host": config_record.imap_host,
         "imap_port": config_record.imap_port,
@@ -695,6 +697,7 @@ def start_monitoring(db: Session = Depends(get_db),
     db.commit()
     # Load config into the in-memory worker WITHOUT transferring a clear password.
     email_monitor.update_config(config.id, {
+        "id": config.id, "user_id": config.user_id,
         "is_active": True, "imap_host": config.imap_host, "imap_port": config.imap_port,
         "use_ssl": config.use_ssl, "username": config.username,
         "password": config.password_encrypted,
@@ -736,6 +739,8 @@ def get_monitoring_status(db: Session = Depends(get_db),
     if not config:
         return {
             "monitor_running": email_monitor.is_running(),
+            "user_monitoring_active": False,
+            "user_monitoring_configured": False,
             "configured": False,
             "has_password": False,
             "monitoring_status": "NOT_CONFIGURED",
@@ -778,6 +783,8 @@ def get_monitoring_status(db: Session = Depends(get_db),
 
     return {
         "monitor_running": worker_running,
+        "user_monitoring_active": (monitoring_status == "active"),
+        "user_monitoring_configured": bool(config.username and config.password_encrypted),
         "configured": True,
         "has_password": bool(config.password_encrypted),
         "monitoring_status": monitoring_status,
@@ -805,7 +812,7 @@ async def trigger_import_email_folder(
     """Import and synchronize emails and configuration from the Email/ directory."""
     try:
         from import_email_folder import import_email_data
-        success = import_email_data()
+        success = import_email_data(target_user_id=current_user.id)
         if not success:
             raise HTTPException(status_code=500, detail="Failed to import data from Email folder")
         return {"status": "success", "message": "Email data imported successfully"}

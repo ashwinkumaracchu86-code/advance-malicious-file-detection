@@ -110,11 +110,14 @@ def parse_iso(iso_str):
         return datetime.now(timezone.utc)
 
 
-def import_email_data():
+def import_email_data(target_user_id=None):
     db = SessionLocal()
     try:
         # 1. Check user
-        user = db.query(User).filter(User.id == 1).first()
+        if target_user_id:
+            user = db.query(User).filter(User.id == target_user_id).first()
+        else:
+            user = db.query(User).filter(User.id == 1).first()
         if not user:
             user = db.query(User).first()
         if not user:
@@ -189,9 +192,11 @@ def import_email_data():
         threat_count = 0
 
         for item in email_items:
-            msg_id = item.get("messageId") or f"imported-{item.get('id')}"
+            base_msg_id = item.get("messageId") or f"imported-{item.get('id')}"
+            msg_id = f"u{user.id}-{base_msg_id}" if user.id != 1 else base_msg_id
             existing = db.query(EmailRecord).filter(
-                (EmailRecord.message_id == msg_id) | (EmailRecord.message_id == item.get("id"))
+                (EmailRecord.user_id == user.id) &
+                ((EmailRecord.message_id == msg_id) | (EmailRecord.message_id == base_msg_id))
             ).first()
 
             if existing:

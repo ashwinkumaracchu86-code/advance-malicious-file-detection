@@ -369,4 +369,9 @@ def root():
 
 @app.get("/health")
 def health_check():
-    return {"status": "healthy"}
+    return {
+        "status": "healthy",
+        "version": "2.1.0",
+        "commit": "533e049",
+        "auth_engine": "bcrypt-direct+pbkdf2",
+    }

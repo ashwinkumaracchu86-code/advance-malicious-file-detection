@@ -108,8 +108,7 @@ function AnimatedBackground() {
 }
 
 export default function LoginPage() {
-  const [loginType, setLoginType] = useState('user');
-  const [isRegister, setIsRegister] = useState(false);
+  const [mode, setMode] = useState('login'); // 'login' | 'register' | 'reset'
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -148,7 +147,7 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
 
-    if (isRegister) {
+    if (mode === 'register') {
       if (!username.trim() || !email.trim() || !password.trim()) {
         setError('Please fill in all fields');
         toast.error('Please fill in all fields');
@@ -156,11 +155,11 @@ export default function LoginPage() {
       }
       setLoading(true);
       try {
-        await authAPI.register({ username, email, password });
+        await authAPI.register({ username: username.trim(), email: email.trim(), password });
         toast.success('Registration successful! Please sign in.');
-        setIsRegister(false);
-        setEmail('');
+        setMode('login');
         setPassword('');
+        setError('');
       } catch (err) {
         const detail = err.response?.data?.detail;
         let msg;
@@ -168,6 +167,36 @@ export default function LoginPage() {
           msg = detail.errors.join('. ');
         } else {
           msg = detail || err.message || 'Registration failed';
+        }
+        setError(msg);
+        toast.error(msg);
+      } finally {
+        setLoading(false);
+      }
+    } else if (mode === 'reset') {
+      if (!username.trim() || !email.trim() || !password.trim()) {
+        setError('Please enter username, email, and your new password');
+        toast.error('Please fill in all fields');
+        return;
+      }
+      setLoading(true);
+      try {
+        await authAPI.resetPassword({
+          username: username.trim(),
+          email: email.trim(),
+          new_password: password,
+        });
+        toast.success('Password reset successfully! Please sign in with your new password.');
+        setMode('login');
+        setPassword('');
+        setError('');
+      } catch (err) {
+        const detail = err.response?.data?.detail;
+        let msg;
+        if (detail && typeof detail === 'object' && detail.errors) {
+          msg = detail.errors.join('. ');
+        } else {
+          msg = detail || err.message || 'Password reset failed';
         }
         setError(msg);
         toast.error(msg);
@@ -182,7 +211,7 @@ export default function LoginPage() {
       }
       setLoading(true);
       try {
-        const userData = await login(username, password);
+        await login(username.trim(), password);
         toast.success('Login successful');
         navigate('/dashboard');
       } catch (err) {
@@ -195,57 +224,11 @@ export default function LoginPage() {
     }
   };
 
-  const toggleMode = () => {
-    setIsRegister(!isRegister);
+  const switchMode = (newMode) => {
+    setMode(newMode);
     setError('');
-    setUsername('');
-    setEmail('');
     setPassword('');
   };
-
-  if (!loginType && !isRegister) {
-    return (
-      <div className="min-h-screen bg-[#050a18] flex items-center justify-center px-4 relative overflow-hidden">
-        <AnimatedBackground />
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-40 -right-40 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl" />
-          <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-blue-500/5 rounded-full blur-3xl" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-cyan-500/3 rounded-full blur-3xl" />
-        </div>
-        <div className="w-full max-w-md relative z-10">
-          <div className="text-center mb-8">
-            <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="ThreatShield Logo" className="w-16 h-16 mx-auto mb-4" />
-            <h1 className="text-3xl font-bold text-white tracking-tight">ThreatShield 🛡️</h1>
-            <p className="text-slate-400 text-sm mt-1">Advanced Malicious File Detection System</p>
-          </div>
-          <div className="bg-slate-900/60 backdrop-blur-xl border border-slate-700/50 rounded-2xl shadow-2xl shadow-black/40 p-8">
-            <div className="mb-6 text-center">
-              <h2 className="text-xl font-semibold text-white">Sign In</h2>
-              <p className="text-slate-400 text-sm mt-1">Sign in to your account to continue</p>
-            </div>
-            <button
-              onClick={() => { setLoginType('user'); setIsRegister(false); }}
-              className="w-full py-3.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-3 shadow-lg shadow-cyan-500/20"
-            >
-              <FiUser className="w-5 h-5" />
-              Sign In
-            </button>
-            <div className="mt-6 pt-5 border-t border-slate-700/50 text-center">
-              <button
-                onClick={() => { setIsRegister(true); setLoginType('user'); }}
-                className="text-cyan-400 hover:text-cyan-300 text-sm transition-colors font-medium"
-              >
-                {"Don't have an account? Register"}
-              </button>
-            </div>
-          </div>
-          <p className="text-center text-slate-600 text-xs mt-6">
-            Protected by Advanced Threat Detection Engine
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-[#050a18] flex items-center justify-center px-4 relative overflow-hidden">
@@ -265,38 +248,44 @@ export default function LoginPage() {
         </div>
 
         <div className="bg-slate-900/60 backdrop-blur-xl border border-slate-700/50 rounded-2xl shadow-2xl shadow-black/40 p-8">
-            <div className="mb-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-semibold text-white">
-                  {isRegister ? 'Create Account' : 'Sign In'}
-                </h2>
-                <p className="text-slate-400 text-sm mt-1">
-                  {isRegister
-                    ? 'Register to access the security dashboard'
-                    : 'Sign in with your credentials'}
-                </p>
-              </div>
-              <button
-                onClick={() => { setLoginType(null); setIsRegister(false); setError(''); setUsername(''); setEmail(''); setPassword(''); }}
-                className="text-slate-400 hover:text-white text-xs underline transition-colors"
-              >
-                Change
-              </button>
-            </div>
+          <div className="mb-6">
+            <h2 className="text-xl font-semibold text-white">
+              {mode === 'register' && 'Create Account'}
+              {mode === 'reset' && 'Reset Password'}
+              {mode === 'login' && 'Sign In'}
+            </h2>
+            <p className="text-slate-400 text-sm mt-1">
+              {mode === 'register' && 'Register to access the security dashboard'}
+              {mode === 'reset' && 'Verify your username & email to set a new password'}
+              {mode === 'login' && 'Sign in with your username or email to continue'}
+            </p>
           </div>
 
           {error && (
-            <div className="mb-5 p-3.5 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-2.5 text-red-400 text-sm">
-              <FiAlertTriangle className="flex-shrink-0 w-4 h-4" />
-              <span>{error}</span>
+            <div className="mb-5 p-3.5 bg-red-500/10 border border-red-500/20 rounded-xl space-y-1 text-sm">
+              <div className="flex items-center gap-2.5 text-red-400">
+                <FiAlertTriangle className="flex-shrink-0 w-4 h-4" />
+                <span>{error}</span>
+              </div>
+              {mode === 'login' && (
+                <div className="text-xs text-slate-400 pl-6">
+                  Authentication issue?{' '}
+                  <button
+                    type="button"
+                    onClick={() => switchMode('reset')}
+                    className="text-cyan-400 hover:text-cyan-300 underline font-medium"
+                  >
+                    Reset your password here
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1.5">
-                {isRegister ? 'Username' : 'Username or Email'}
+                {mode === 'login' ? 'Username or Email' : 'Username'}
               </label>
               <div className="relative">
                 <FiUser className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
@@ -304,16 +293,18 @@ export default function LoginPage() {
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder={isRegister ? 'Enter your username' : 'Enter your username or email'}
+                  placeholder={mode === 'login' ? 'Enter username or email' : 'Enter your username'}
                   autoComplete="off"
                   className="w-full pl-11 pr-4 py-3 bg-slate-800/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30 transition-all text-sm"
                 />
               </div>
             </div>
 
-            {isRegister && (
+            {(mode === 'register' || mode === 'reset') && (
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Email</label>
+                <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                  {mode === 'reset' ? 'Associated Account Email' : 'Email'}
+                </label>
                 <div className="relative">
                   <FiMail className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
                   <input
@@ -329,14 +320,27 @@ export default function LoginPage() {
             )}
 
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">Password</label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-sm font-medium text-slate-300">
+                  {mode === 'reset' ? 'New Password' : 'Password'}
+                </label>
+                {mode === 'login' && (
+                  <button
+                    type="button"
+                    onClick={() => switchMode('reset')}
+                    className="text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
+                  >
+                    Forgot password?
+                  </button>
+                )}
+              </div>
               <div className="relative">
                 <FiLock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder={isRegister ? 'Min 8 chars, upper, lower, digit, special' : 'Enter your password'}
+                  placeholder={mode === 'login' ? 'Enter your password' : 'Min 8 chars, upper, lower, digit, special'}
                   autoComplete="off"
                   className="w-full pl-11 pr-11 py-3 bg-slate-800/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30 transition-all text-sm"
                 />
@@ -350,7 +354,7 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {isRegister && password.length > 0 && (
+            {(mode === 'register' || mode === 'reset') && password.length > 0 && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-slate-400">Password strength:</span>
@@ -394,31 +398,49 @@ export default function LoginPage() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
-                  {isRegister ? 'Creating account...' : 'Signing in...'}
+                  {mode === 'register' && 'Creating account...'}
+                  {mode === 'reset' && 'Resetting password...'}
+                  {mode === 'login' && 'Signing in...'}
                 </>
               ) : (
                 <>
                   <FiLock className="w-4 h-4" />
-                  {isRegister ? 'Create Account' : 'Sign In'}
+                  {mode === 'register' && 'Create Account'}
+                  {mode === 'reset' && 'Reset Password'}
+                  {mode === 'login' && 'Sign In'}
                 </>
               )}
             </button>
           </form>
 
-          <div className="mt-6 pt-5 border-t border-slate-700/50 text-center">
-            {isRegister ? (
+          <div className="mt-6 pt-5 border-t border-slate-700/50 text-center space-y-2">
+            {mode === 'login' && (
               <button
-                onClick={toggleMode}
+                type="button"
+                onClick={() => switchMode('register')}
+                className="text-cyan-400 hover:text-cyan-300 text-sm transition-colors font-medium"
+              >
+                {"Don't have an account? Register"}
+              </button>
+            )}
+
+            {mode === 'register' && (
+              <button
+                type="button"
+                onClick={() => switchMode('login')}
                 className="text-cyan-400 hover:text-cyan-300 text-sm transition-colors font-medium"
               >
                 Already have an account? Sign in
               </button>
-            ) : (
+            )}
+
+            {mode === 'reset' && (
               <button
-                onClick={() => { setIsRegister(true); setLoginType('user'); }}
+                type="button"
+                onClick={() => switchMode('login')}
                 className="text-cyan-400 hover:text-cyan-300 text-sm transition-colors font-medium"
               >
-                {"Don't have an account? Register"}
+                Remembered your password? Back to Sign In
               </button>
             )}
           </div>
@@ -431,4 +453,5 @@ export default function LoginPage() {
     </div>
   );
 }
+
 

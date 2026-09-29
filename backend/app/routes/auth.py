@@ -5,7 +5,7 @@ from sqlalchemy import or_, func
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models.models import User, AuditLog
-from ..schemas.schemas import UserCreate, UserLogin, LoginRequest, Token, TokenRefresh, UserResponse
+from ..schemas.schemas import UserCreate, UserLogin, LoginRequest, PasswordResetRequest, Token, TokenRefresh, UserResponse
 from ..security.auth import (
     create_access_token,
     create_refresh_token,
@@ -184,3 +184,45 @@ def register(user_data: UserCreate, req: Request, db: Session = Depends(get_db))
 def get_me(current_user: User = Depends(get_current_user)):
     """Get current authenticated user info."""
     return UserResponse.model_validate(current_user)
+
+
+@router.post("/reset-password")
+def reset_password(request: PasswordResetRequest, req: Request, db: Session = Depends(get_db)):
+    """Allow user to reset password by verifying username and email."""
+    password_errors = validate_password_strength(request.new_password)
+    if password_errors:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"message": "Password does not meet security requirements", "errors": password_errors},
+        )
+
+    clean_username = request.username.strip()
+    clean_email = request.email.strip().lower()
+
+    user = db.query(User).filter(
+        func.lower(User.username) == clean_username.lower(),
+        func.lower(User.email) == clean_email,
+    ).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account found matching that username and email combination.",
+        )
+
+    user.hashed_password = get_password_hash(request.new_password)
+    db.commit()
+
+    client_ip = _get_client_ip(req)
+    login_tracker.clear_attempts(client_ip)
+
+    log = AuditLog(
+        user_id=user.id,
+        action="password_reset",
+        details=f"Password reset successfully for {user.username} from IP: {client_ip}",
+        result="success",
+    )
+    db.add(log)
+    db.commit()
+
+    return {"status": "success", "message": "Password reset successfully. You can now log in with your new password."}

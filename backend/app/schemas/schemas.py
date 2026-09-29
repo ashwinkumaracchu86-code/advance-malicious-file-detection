@@ -79,6 +79,11 @@ class ScanResponse(BaseModel):
     vt_detections_count: int = 0
     vt_positives: int = 0
     file: Optional[FileResponse] = None
+    filename: Optional[str] = None
+    hash: Optional[str] = None
+    sha256: Optional[str] = None
+    file_size: Optional[int] = None
+    created_at: Optional[str] = None
 
     class Config:
         from_attributes = True

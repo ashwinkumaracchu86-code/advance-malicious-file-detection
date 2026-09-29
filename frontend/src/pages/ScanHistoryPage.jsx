@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  FiSearch, FiFilter, FiChevronLeft, FiChevronRight, FiClock, FiFile
+  FiSearch, FiFilter, FiChevronLeft, FiChevronRight, FiClock, FiFile, FiTrash2
 } from 'react-icons/fi';
+import toast from 'react-hot-toast';
 import { scansAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 const CLASSIFICATIONS = ['All', 'Safe', 'Suspicious', 'Malicious'];
 const SORT_OPTIONS = [
@@ -18,6 +20,7 @@ const SORT_OPTIONS = [
 export default function ScanHistoryPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { user } = useAuth();
 
   const [scans, setScans] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -31,6 +34,12 @@ export default function ScanHistoryPage() {
   const perPage = 15;
 
   const fetchScans = useCallback(async () => {
+    if (!user) {
+      setScans([]);
+      setTotalCount(0);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const params = {
@@ -54,11 +63,18 @@ export default function ScanHistoryPage() {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, search, classification, sort, dateFrom, dateTo]);
+  }, [user, currentPage, search, classification, sort, dateFrom, dateTo]);
 
   useEffect(() => {
     fetchScans();
   }, [fetchScans]);
+
+  useEffect(() => {
+    // Reset scans state whenever active user identity changes
+    setScans([]);
+    setTotalCount(0);
+    setCurrentPage(1);
+  }, [user?.id]);
 
   useEffect(() => {
     const params = {};
@@ -69,6 +85,17 @@ export default function ScanHistoryPage() {
     if (dateTo) params.date_to = dateTo;
     setSearchParams(params, { replace: true });
   }, [search, classification, sort, dateFrom, dateTo]);
+
+  const handleDeleteScan = async (scanId) => {
+    if (!window.confirm(`Are you sure you want to delete scan #${scanId}?`)) return;
+    try {
+      await scansAPI.delete(scanId);
+      toast.success('Scan deleted successfully');
+      fetchScans();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to delete scan');
+    }
+  };
 
   const totalPages = Math.ceil(totalCount / perPage);
 
@@ -179,10 +206,14 @@ export default function ScanHistoryPage() {
             </div>
           </div>
         ) : scans.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-48 text-dark-500">
-            <FiFile className="text-4xl mb-3" />
-            <p className="text-lg">No scans found</p>
-            <p className="text-sm">Try adjusting your search or filters</p>
+          <div className="flex flex-col items-center justify-center h-52 text-dark-400">
+            <FiFile className="text-4xl mb-3 text-dark-500" />
+            <p className="text-lg font-medium text-dark-200">No scan history available.</p>
+            <p className="text-sm text-dark-400 mt-1">
+              {search || classification !== 'All' || dateFrom || dateTo
+                ? 'No scans match your search or filters. Try adjusting them.'
+                : 'Upload and scan a file to start building your personal scan history.'}
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -196,6 +227,7 @@ export default function ScanHistoryPage() {
                   <th className="text-left px-5 py-3 text-dark-400 font-medium">Risk Score</th>
                   <th className="text-left px-5 py-3 text-dark-400 font-medium">Classification</th>
                   <th className="text-left px-5 py-3 text-dark-400 font-medium">Date</th>
+                  <th className="text-right px-5 py-3 text-dark-400 font-medium">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -209,16 +241,16 @@ export default function ScanHistoryPage() {
                     <td className="px-5 py-3 text-dark-100 truncate max-w-[200px]">
                       <div className="flex items-center gap-2">
                         <FiFile className="text-dark-500 flex-shrink-0" />
-                        <span>{scan.filename}</span>
+                        <span>{scan.filename || scan.file?.original_filename || 'Unknown'}</span>
                       </div>
                     </td>
                     <td className="px-5 py-3">
                       <code className="text-dark-300 text-xs font-mono">
-                        {truncateHash(scan.hash || scan.sha256 || scan.hashes?.sha256)}
+                        {truncateHash(scan.hash || scan.sha256 || scan.file?.sha256 || scan.hashes?.sha256)}
                       </code>
                     </td>
                     <td className="px-5 py-3 text-dark-300 text-xs">
-                      {formatSize(scan.file_size || scan.size)}
+                      {formatSize(scan.file_size ?? scan.size ?? scan.file?.file_size)}
                     </td>
                     <td className="px-5 py-3">
                       <span className={`inline-block px-2.5 py-1 rounded text-xs font-semibold border ${getRiskBadge(scan.risk_score)}`}>
@@ -231,7 +263,19 @@ export default function ScanHistoryPage() {
                       </span>
                     </td>
                     <td className="px-5 py-3 text-dark-400 text-xs">
-                      {scan.created_at ? new Date(scan.created_at).toLocaleDateString() : '—'}
+                      {scan.created_at || scan.scan_date || scan.file?.upload_date
+                        ? new Date(scan.created_at || scan.scan_date || scan.file?.upload_date).toLocaleDateString()
+                        : '—'}
+                    </td>
+                    <td className="px-5 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteScan(scan.id)}
+                        className="p-1.5 rounded-lg text-dark-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                        title="Delete scan record"
+                      >
+                        <FiTrash2 className="w-4 h-4" />
+                      </button>
                     </td>
                   </tr>
                 ))}

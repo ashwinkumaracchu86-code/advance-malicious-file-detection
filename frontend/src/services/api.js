@@ -115,6 +115,7 @@ export const scansAPI = {
   scan: (fileId) => api.post(`/scan/${fileId}`),
   get: (scanId) => api.get(`/scan/${scanId}`),
   list: (params) => api.get('/scans', { params }),
+  delete: (scanId) => api.delete(`/scan/${scanId}`),
 };
 
 export const dashboardAPI = {

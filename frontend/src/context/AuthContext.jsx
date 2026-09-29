@@ -59,10 +59,12 @@ export function AuthProvider({ children }) {
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('user');
+    const savedTheme = localStorage.getItem('theme');
+    localStorage.clear();
     sessionStorage.clear();
+    if (savedTheme) {
+      localStorage.setItem('theme', savedTheme);
+    }
     setUser(null);
   };
 

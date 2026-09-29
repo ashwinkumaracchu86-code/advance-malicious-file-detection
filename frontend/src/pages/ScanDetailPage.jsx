@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import {
   FiArrowLeft, FiFile, FiHash, FiShield, FiAlertTriangle,
   FiCheckCircle, FiCopy, FiCheck, FiDownload, FiLock,
-  FiInfo, FiCode,
+  FiInfo, FiCode, FiTrash2,
 } from 'react-icons/fi';
 import { scansAPI, quarantineAPI, reportsAPI } from '../services/api';
 
@@ -115,7 +115,9 @@ export default function ScanDetailPage() {
         });
       })
       .catch((err) => {
-        if (err.response?.status === 404) {
+        if (err.response?.status === 403) {
+          setError('Access Denied: You do not have permission to access this scan.');
+        } else if (err.response?.status === 404) {
           setError('Scan not found.');
         } else {
           setError('Failed to load scan details.');
@@ -123,6 +125,17 @@ export default function ScanDetailPage() {
       })
       .finally(() => setLoading(false));
   }, [id]);
+
+  const handleDeleteScan = async () => {
+    if (!window.confirm(`Are you sure you want to delete this scan record (#${id})?`)) return;
+    try {
+      await scansAPI.delete(id);
+      toast.success('Scan deleted successfully');
+      navigate('/history');
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to delete scan');
+    }
+  };
 
   const handleDownloadPDF = async () => {
     setDownloadingPDF(true);
@@ -401,6 +414,13 @@ export default function ScanDetailPage() {
         >
           <FiLock className="w-4 h-4" />
           {quarantining ? 'Quarantining...' : 'Quarantine File'}
+        </button>
+        <button
+          onClick={handleDeleteScan}
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-dark-800 hover:bg-red-500/20 text-dark-300 hover:text-red-400 border border-dark-700 hover:border-red-500/30 rounded-lg text-sm font-medium transition-colors"
+        >
+          <FiTrash2 className="w-4 h-4" />
+          Delete Scan
         </button>
       </div>
     </div>

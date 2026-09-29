@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import datetime, timedelta
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -62,33 +63,78 @@ def trigger_scan(
     db.add(log)
     db.commit()
 
-    return ScanResponse.model_validate(scan)
+    scan_data = ScanResponse.model_validate(scan)
+    scan_data.filename = file_record.original_filename
+    scan_data.hash = file_record.sha256
+    scan_data.sha256 = file_record.sha256
+    scan_data.file_size = file_record.file_size
+    scan_data.created_at = scan.scan_date.isoformat() if scan.scan_date else None
+    scan_data.file = FileResponse.model_validate(file_record)
+    return scan_data
 
 
 @router.get("/scans", response_model=dict)
+@router.get("/scan-history", response_model=dict)
+@router.get("/api/scan-history", response_model=dict)
+@router.get("/scans/history", response_model=dict)
 def list_scans(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     search: Optional[str] = None,
     classification: Optional[str] = None,
-    sort_by: str = Query("scan_date", pattern="^(scan_date|risk_score|classification)$"),
-    sort_order: str = Query("desc", pattern="^(asc|desc)$"),
+    sort_by: Optional[str] = Query("scan_date"),
+    sort_order: Optional[str] = Query("desc"),
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """List the caller's own scans with pagination, search, filter, and sort."""
+    """List the caller's own scans with pagination, search, filter, and sort (strictly isolated per user)."""
     query = db.query(Scan).filter(Scan.user_id == current_user.id)
 
-    if classification:
-        query = query.filter(Scan.classification == classification)
+    if classification and classification.lower() != "all":
+        query = query.filter(Scan.classification == classification.lower())
 
+    joined_file = False
     if search:
-        query = query.join(FileModel, Scan.file_id == FileModel.id).filter(
-            FileModel.original_filename.contains(search)
-        )
+        query = query.join(FileModel, Scan.file_id == FileModel.id)
+        joined_file = True
+        query = query.filter(FileModel.original_filename.contains(search))
 
-    sort_column = getattr(Scan, sort_by, Scan.scan_date)
-    if sort_order == "desc":
+    if date_from:
+        try:
+            df = datetime.fromisoformat(date_from)
+            query = query.filter(Scan.scan_date >= df)
+        except Exception:
+            pass
+
+    if date_to:
+        try:
+            dt = datetime.fromisoformat(date_to)
+            if len(date_to) <= 10:
+                dt = dt.replace(hour=23, minute=59, second=59)
+            query = query.filter(Scan.scan_date <= dt)
+        except Exception:
+            pass
+
+    clean_sort = (sort_by or "scan_date").lower()
+    is_desc = sort_order == "desc" or clean_sort.startswith("-")
+    clean_sort = clean_sort.lstrip("-")
+
+    if clean_sort in ("created_at", "scan_date", "date"):
+        sort_column = Scan.scan_date
+    elif clean_sort in ("risk_score", "risk"):
+        sort_column = Scan.risk_score
+    elif clean_sort == "classification":
+        sort_column = Scan.classification
+    elif clean_sort == "filename":
+        if not joined_file:
+            query = query.join(FileModel, Scan.file_id == FileModel.id)
+        sort_column = FileModel.original_filename
+    else:
+        sort_column = Scan.scan_date
+
+    if is_desc:
         query = query.order_by(desc(sort_column))
     else:
         query = query.order_by(asc(sort_column))
@@ -98,31 +144,80 @@ def list_scans(
 
     results = []
     for scan in scans:
-        scan_data = ScanResponse.model_validate(scan)
+        scan_dict = ScanResponse.model_validate(scan).model_dump()
         if scan.file:
-            scan_data.file = FileResponse.model_validate(scan.file)
-        results.append(scan_data)
+            scan_dict["file"] = FileResponse.model_validate(scan.file).model_dump()
+            scan_dict["filename"] = scan.file.original_filename
+            scan_dict["sha256"] = scan.file.sha256
+            scan_dict["hash"] = scan.file.sha256
+            scan_dict["file_size"] = scan.file.file_size
+        else:
+            scan_dict["filename"] = "Unknown"
+            scan_dict["sha256"] = ""
+            scan_dict["hash"] = ""
+            scan_dict["file_size"] = 0
+        scan_dict["created_at"] = scan.scan_date.isoformat() if scan.scan_date else None
+        results.append(scan_dict)
 
     return {
         "total": total,
         "skip": skip,
         "limit": limit,
-        "scans": [s.model_dump() for s in results],
+        "scans": results,
     }
 
 
-@router.get("/scan/{scan_id}", response_model=ScanResponse)
+@router.get("/scan/{scan_id}", response_model=dict)
+@router.get("/scans/{scan_id}", response_model=dict)
 def get_scan(
     scan_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Get scan result by ID (owner only)."""
+    """Get scan result by ID (strictly isolated to owner only)."""
     scan = owned_or_forbidden(
         db.query(Scan).filter(Scan.id == scan_id).first(), current_user
     )
 
     scan_data = ScanResponse.model_validate(scan)
+    res = scan_data.model_dump()
     if scan.file:
-        scan_data.file = FileResponse.model_validate(scan.file)
-    return scan_data
+        res["file"] = FileResponse.model_validate(scan.file).model_dump()
+        res["filename"] = scan.file.original_filename
+        res["sha256"] = scan.file.sha256
+        res["hash"] = scan.file.sha256
+        res["file_size"] = scan.file.file_size
+    else:
+        res["filename"] = "Unknown"
+        res["sha256"] = ""
+        res["hash"] = ""
+        res["file_size"] = 0
+    res["created_at"] = scan.scan_date.isoformat() if scan.scan_date else None
+    return res
+
+
+@router.delete("/scan/{scan_id}")
+@router.delete("/scans/{scan_id}")
+def delete_scan(
+    scan_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Delete a scan record (strictly isolated to owner only)."""
+    scan = owned_or_forbidden(
+        db.query(Scan).filter(Scan.id == scan_id).first(), current_user
+    )
+    db.delete(scan)
+    db.commit()
+
+    log = AuditLog(
+        user_id=current_user.id,
+        action="scan_delete",
+        details=f"Deleted scan record #{scan_id}",
+        result="success",
+    )
+    db.add(log)
+    db.commit()
+
+    return {"status": "success", "message": f"Scan #{scan_id} deleted successfully."}
+

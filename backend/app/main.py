@@ -125,6 +125,36 @@ def _ensure_quarantine_owner_column():
         logger.warning(f"Quarantine owner migration error (non-fatal): {e}")
 
 
+def _ensure_scan_owner_column():
+    """Ensure the scan owner column exists and safely backfill it from owning file.
+
+    Safe migration strategy: Scans belong to the file uploader. If a scan does not have
+    a user_id, backfill it from the uploaded_by field of the associated file record.
+    Never randomly assign records to users.
+    """
+    from sqlalchemy import inspect, text
+    inspector = inspect(engine)
+    try:
+        if "scans" not in inspector.get_table_names():
+            return
+        columns = [col["name"] for col in inspector.get_columns("scans")]
+        if "user_id" not in columns:
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE scans ADD COLUMN user_id INTEGER"))
+                conn.commit()
+            logger.info("Added missing 'user_id' column to scans table.")
+        with engine.connect() as conn:
+            conn.execute(text(
+                "UPDATE scans SET user_id = ("
+                " SELECT f.uploaded_by FROM files f WHERE f.id = scans.file_id"
+                ") WHERE user_id IS NULL AND file_id IN (SELECT id FROM files WHERE uploaded_by IS NOT NULL)"
+            ))
+            conn.commit()
+            logger.info("Ensured scan user ownership is safely backfilled from file ownership.")
+    except Exception as e:
+        logger.warning(f"Scan owner migration error (non-fatal): {e}")
+
+
 def _migrate_existing_users():
     """Migrate existing users: set role based on is_admin flag."""
     db = SessionLocal()
@@ -228,6 +258,7 @@ async def lifespan(app: FastAPI):
     _ensure_schema_columns()
     _ensure_email_schema_columns()
     _ensure_quarantine_owner_column()
+    _ensure_scan_owner_column()
     _migrate_existing_users()
     _ensure_default_accounts()
 
@@ -316,6 +347,7 @@ try:
     _ensure_schema_columns()
     _ensure_email_schema_columns()
     _ensure_quarantine_owner_column()
+    _ensure_scan_owner_column()
     _migrate_existing_users()
 except Exception as e:
     logger.warning(f"Schema bootstrap error (non-fatal): {e}")

@@ -11,6 +11,7 @@ import {
 } from 'recharts';
 import toast from 'react-hot-toast';
 import { dashboardAPI, antivirusAPI, realtimeAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 const COLORS = {
   safe: '#22c55e',
@@ -44,11 +45,17 @@ const getRiskLevel = (score) => {
 export default function DashboardPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [autoScanEnabled, setAutoScanEnabled] = useState(true);
 
   const fetchStats = useCallback(async () => {
+    if (!user) {
+      setStats(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const res = await dashboardAPI.getStats();
@@ -58,7 +65,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   const fetchAutoScanStatus = useCallback(async () => {
     try {
@@ -90,9 +97,10 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
+    setStats(null);
     fetchStats();
     fetchAutoScanStatus();
-  }, [fetchStats, fetchAutoScanStatus, location.pathname]);
+  }, [fetchStats, fetchAutoScanStatus, location.pathname, user?.id]);
 
   if (loading) {
     return (
@@ -381,7 +389,9 @@ export default function DashboardPage() {
                     <tr key={scan.id} onClick={() => navigate(`/scan/${scan.id}`)}
                       className="border-b border-dark-700/30 hover:bg-dark-800/50 cursor-pointer transition-colors group">
                       <td className="px-6 py-3">
-                        <span className="text-dark-100 truncate max-w-[180px] block group-hover:text-cyan-400 transition-colors">{scan.filename}</span>
+                        <span className="text-dark-100 truncate max-w-[180px] block group-hover:text-cyan-400 transition-colors">
+                          {scan.filename || scan.file?.original_filename || 'Unknown'}
+                        </span>
                       </td>
                       <td className="px-6 py-3">
                         <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold ${
@@ -396,7 +406,7 @@ export default function DashboardPage() {
                         <span className="text-dark-300 capitalize">{scan.classification}</span>
                       </td>
                       <td className="px-6 py-3 text-dark-400 text-xs">
-                        {scan.scan_date ? new Date(scan.scan_date).toLocaleDateString() : '—'}
+                        {(scan.scan_date || scan.created_at) ? new Date(scan.scan_date || scan.created_at).toLocaleDateString() : '—'}
                       </td>
                     </tr>
                   ))
@@ -437,7 +447,9 @@ export default function DashboardPage() {
                     <tr key={threat.id} onClick={() => navigate(`/scan/${threat.id}`)}
                       className="border-b border-dark-700/30 hover:bg-dark-800/50 cursor-pointer transition-colors group">
                       <td className="px-6 py-3">
-                        <span className="text-dark-100 truncate max-w-[160px] block group-hover:text-red-400 transition-colors">{threat.filename}</span>
+                        <span className="text-dark-100 truncate max-w-[160px] block group-hover:text-red-400 transition-colors">
+                          {threat.filename || threat.file?.original_filename || 'Unknown'}
+                        </span>
                       </td>
                       <td className="px-6 py-3">
                         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/20">

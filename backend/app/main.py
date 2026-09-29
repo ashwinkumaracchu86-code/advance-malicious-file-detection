@@ -150,6 +150,52 @@ def _migrate_existing_users():
         db.close()
 
 
+def _ensure_default_accounts():
+    """Ensure pre-configured accounts (Ashwin_gowda1 admin and anush user) are ready to login."""
+    db = SessionLocal()
+    try:
+        u = db.query(User).filter_by(username="Ashwin_gowda1").first()
+        if not u:
+            u = db.query(User).filter_by(email="ashwinkumaracchu86@gmail.com").first()
+        if u:
+            u.username = "Ashwin_gowda1"
+            u.is_admin = True
+            u.role = ADMIN_ROLE
+            u.hashed_password = get_password_hash("Ashwin@gowda1234")
+            db.commit()
+        else:
+            u = User(
+                username="Ashwin_gowda1",
+                email="ashwinkumaracchu86@gmail.com",
+                hashed_password=get_password_hash("Ashwin@gowda1234"),
+                is_admin=True,
+                role=ADMIN_ROLE,
+            )
+            db.add(u)
+            db.commit()
+
+        u2 = db.query(User).filter_by(username="anush").first()
+        if not u2:
+            u2 = User(
+                username="anush",
+                email="anush12@gmail.com",
+                hashed_password=get_password_hash("password123"),
+                is_admin=False,
+                role=USER_ROLE,
+            )
+            db.add(u2)
+            db.commit()
+        else:
+            u2.hashed_password = get_password_hash("password123")
+            db.commit()
+        logger.info("Default user accounts verified and ready.")
+    except Exception as e:
+        logger.warning(f"Default accounts seeding error (non-fatal): {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events."""
@@ -177,6 +223,7 @@ async def lifespan(app: FastAPI):
     _ensure_email_schema_columns()
     _ensure_quarantine_owner_column()
     _migrate_existing_users()
+    _ensure_default_accounts()
 
     os.makedirs(UPLOADS_DIR, exist_ok=True)
     os.makedirs(QUARANTINE_DIR, exist_ok=True)

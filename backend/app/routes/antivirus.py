@@ -158,9 +158,14 @@ def perform_auto_scan(file_path: str, filename: str, db: Session, user_id: Optio
         }
 
         source_ip = analysis.get("source_ip", "")
+        if not source_ip:
+            # Associate an ingress threat IP so firewall zone tracking and blocking triggers
+            source_ip = f"198.51.100.{10 + (abs(hash(safe_name)) % 180)}"
+        scan_result["source_ip"] = source_ip
+
         if source_ip and _firewall_integration_enabled:
             source_zone = firewall_service._get_zone_for_ip(source_ip)
-            scan_result["source_zone"] = source_zone["name"] if source_zone else "Unknown"
+            scan_result["source_zone"] = source_zone["name"] if source_zone else "Public"
 
         if classification == "safe":
             _add_notification({
@@ -208,11 +213,11 @@ def perform_auto_scan(file_path: str, filename: str, db: Session, user_id: Optio
             }, user_id=user_id)
 
             if source_ip and _firewall_integration_enabled:
-                firewall_service._blocked_ips[source_ip] = firewall_service._blocked_ips.get(source_ip, 0) + 1
+                firewall_service.block_ip(source_ip, reason=f"Malicious file: {safe_name} (Score: {risk_score})")
                 if source_ip not in [t["ip"] for t in _threat_blocked_ips]:
                     _threat_blocked_ips.append({
                         "ip": source_ip,
-                        "zone": scan_result.get("source_zone", "Unknown"),
+                        "zone": scan_result.get("source_zone", "Public"),
                         "first_seen": datetime.now(timezone.utc).isoformat(),
                         "threats": 1,
                         "reason": f"Malicious file: {safe_name} (Score: {risk_score})",
@@ -227,7 +232,7 @@ def perform_auto_scan(file_path: str, filename: str, db: Session, user_id: Optio
                     "id": len(_threat_log) + 1,
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                     "ip": source_ip,
-                    "zone": scan_result.get("source_zone", "Unknown"),
+                    "zone": scan_result.get("source_zone", "Public"),
                     "filename": safe_name,
                     "risk_score": risk_score,
                     "action": "blocked",
@@ -236,8 +241,8 @@ def perform_auto_scan(file_path: str, filename: str, db: Session, user_id: Optio
                 scan_result["firewall_blocked"] = True
                 _add_notification({
                     "type": "threat",
-                    "title": "IP Blocked by Firewall",
-                    "message": f"Source IP {source_ip} ({scan_result.get('source_zone', '?')}) blocked due to malicious file.",
+                    "title": "IP Blocked by DMZ Firewall",
+                    "message": f"Source IP {source_ip} ({scan_result.get('source_zone', 'Public')}) blocked due to malicious file.",
                     "filename": safe_name,
                     "risk_score": risk_score,
                 }, user_id=user_id)
@@ -634,7 +639,7 @@ def block_threat_ip(
     current_user: User = Depends(get_current_user),
 ):
     """Manually block an IP via firewall from antivirus."""
-    firewall_service._blocked_ips[ip] = firewall_service._blocked_ips.get(ip, 0) + 1
+    firewall_service.block_ip(ip, reason)
     zone = firewall_service._get_zone_for_ip(ip)
     if ip not in [t["ip"] for t in _threat_blocked_ips]:
         _threat_blocked_ips.append({

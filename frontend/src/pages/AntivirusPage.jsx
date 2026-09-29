@@ -98,6 +98,8 @@ export default function AntivirusPage() {
     } else if (msg.type === 'notification') {
       setNotifications((prev) => [msg.data, ...prev].slice(0, 100));
       if (msg.data.type === 'threat') toast.error(msg.data.message);
+    } else if (msg.type === 'firewall_event') {
+      fetchFirewallData();
     }
   }, []);
 
@@ -114,7 +116,9 @@ export default function AntivirusPage() {
       setStatus(statusRes.data);
       setStats(statsRes.data);
       setNotifications(notifRes.data.notifications || []);
-      setScanHistory(histRes.data.history || []);
+      const history = histRes.data.history || [];
+      setScanHistory(history);
+      setLiveScanResults((prev) => (prev.length === 0 && history.length > 0 ? history.slice(0, 20) : prev));
       setProtectionEnabled(statusRes.data.protection_enabled);
       setAutoScanEnabled(statusRes.data.auto_scan_enabled);
       setAutoQuarantineEnabled(statusRes.data.auto_quarantine_enabled);
@@ -141,7 +145,7 @@ export default function AntivirusPage() {
   useEffect(() => {
     fetchData();
     fetchFirewallData();
-    refreshInterval.current = setInterval(() => { fetchData(); fetchFirewallData(); }, 15000);
+    refreshInterval.current = setInterval(() => { fetchData(); fetchFirewallData(); }, 3000);
     return () => clearInterval(refreshInterval.current);
   }, [fetchData, fetchFirewallData]);
 

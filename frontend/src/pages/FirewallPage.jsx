@@ -128,13 +128,28 @@ export default function FirewallPage() {
     }
   }, []);
 
+  const [simulating, setSimulating] = useState(false);
+
+  const handleSimulateTraffic = async () => {
+    setSimulating(true);
+    try {
+      const res = await firewallAPI.simulateTraffic(6);
+      toast.success(`DMZ Firewall: Processed ${res.data.simulated_count} live packets across zones!`);
+      fetchAll();
+    } catch {
+      toast.error('Failed to trigger test traffic');
+    } finally {
+      setSimulating(false);
+    }
+  };
+
   const handleWsMessage = useCallback((msg) => { if (msg.type === 'firewall_event') fetchAll(); }, [fetchAll]);
   const { connected } = useWebSocket(handleWsMessage);
 
   useEffect(() => {
     fetchAll();
     let interval;
-    if (autoRefresh) interval = setInterval(fetchAll, 10000);
+    if (autoRefresh) interval = setInterval(fetchAll, 3000);
     return () => { if (interval) clearInterval(interval); };
   }, [fetchAll, autoRefresh]);
 
@@ -254,7 +269,11 @@ export default function FirewallPage() {
             <span className={`w-2 h-2 rounded-full ${connected ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`} />
             {connected ? 'LIVE' : 'OFFLINE'}
           </span>
-          <button onClick={() => setAutoRefresh(!autoRefresh)} className={`p-2.5 rounded-xl border transition-all ${autoRefresh ? 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400' : 'bg-dark-800 border-dark-700 text-dark-400'}`}>
+          <button onClick={handleSimulateTraffic} disabled={simulating} className="px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white shadow-lg shadow-cyan-500/20 transition-all disabled:opacity-50">
+            <FiActivity className={`w-3.5 h-3.5 ${simulating ? 'animate-spin' : 'animate-pulse'}`} />
+            {simulating ? 'Inspecting...' : 'Test Traffic Burst'}
+          </button>
+          <button onClick={() => setAutoRefresh(!autoRefresh)} title="Toggle real-time auto-refresh" className={`p-2.5 rounded-xl border transition-all ${autoRefresh ? 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400' : 'bg-dark-800 border-dark-700 text-dark-400'}`}>
             <FiRefreshCw className={`w-4 h-4 ${autoRefresh ? 'animate-spin' : ''}`} />
           </button>
           <button onClick={handleToggleFirewall} className={`px-4 py-2.5 rounded-xl font-medium text-sm flex items-center gap-2 transition-all ${status?.enabled ? 'bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20'}`}>

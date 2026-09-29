@@ -189,3 +189,43 @@ def get_zone_connections(zone_name: str, current_user=Depends(get_current_user))
 @router.get("/check")
 def check_connection(remote_ip: str = Query(...), remote_port: int = Query(...), local_ip: str = Query("127.0.0.1"), local_port: int = Query(0), protocol: str = Query("tcp"), current_user=Depends(get_current_user)):
     return firewall_service.check_connection(remote_ip, remote_port, local_ip, local_port, protocol)
+
+
+@router.get("/realtime/status")
+def get_realtime_status(current_user=Depends(get_current_user)):
+    return {
+        "running": firewall_service.is_realtime_inspector_running(),
+        "stats": firewall_service._stats.copy(),
+        "blocked_ips_count": len(firewall_service._blocked_ips),
+        "total_rules": len(firewall_service._inter_zone_rules),
+    }
+
+
+@router.post("/realtime/start")
+def start_realtime(current_user=Depends(get_current_user)):
+    firewall_service.start_realtime_inspector()
+    return {"status": "started", "running": True}
+
+
+@router.post("/realtime/stop")
+def stop_realtime(current_user=Depends(get_current_user)):
+    firewall_service.stop_realtime_inspector()
+    return {"status": "stopped", "running": False}
+
+
+@router.post("/simulate-traffic")
+def simulate_traffic(count: int = Query(5, ge=1, le=50), current_user=Depends(get_current_user)):
+    results = firewall_service.simulate_traffic(count)
+    return {
+        "status": "success",
+        "simulated_count": len(results),
+        "results": results,
+        "current_stats": firewall_service._stats.copy(),
+    }
+
+
+@router.post("/block-ip")
+def block_ip(ip: str = Query(...), reason: str = Query("Manual block"), current_user=Depends(get_current_user)):
+    firewall_service.block_ip(ip, reason)
+    return {"status": "blocked", "ip": ip, "reason": reason}
+

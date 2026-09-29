@@ -266,11 +266,18 @@ async def lifespan(app: FastAPI):
     os.makedirs(QUARANTINE_DIR, exist_ok=True)
     logger.info(f"Directories ensured: {UPLOADS_DIR}, {QUARANTINE_DIR}")
 
+    from .services import firewall_service
+    firewall_service.start_realtime_inspector()
+    logger.info("DMZ Firewall Real-Time Inspector started.")
+
     from .routes.antivirus import _monitored_paths
     from .services import folder_monitor
+    if os.path.isdir(UPLOADS_DIR):
+        folder_monitor.start_monitoring(UPLOADS_DIR)
+        logger.info(f"Auto-started real-time antivirus monitoring on: {UPLOADS_DIR}")
     if _monitored_paths:
         for path in _monitored_paths:
-            if os.path.isdir(path):
+            if os.path.isdir(path) and path != UPLOADS_DIR:
                 folder_monitor.start_monitoring(path)
                 logger.info(f"Auto-started monitoring: {path}")
 
@@ -326,10 +333,11 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         pass
 
-    from .services import folder_monitor
+    from .services import folder_monitor, firewall_service
     from .services.email_monitor_service import email_monitor as em
     em.stop()
     folder_monitor.stop_monitoring()
+    firewall_service.stop_realtime_inspector()
     logger.info("Application shutting down.")
 
 

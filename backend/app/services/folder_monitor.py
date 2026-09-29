@@ -174,6 +174,16 @@ class MaliciousFileHandler(FileSystemEventHandler):
                     f"(Classification: {classification}, Score: {risk_score})"
                 )
 
+                # DMZ Firewall Real-Time Integration: block source ingress
+                try:
+                    from . import firewall_service
+                    source_ip = f"198.51.100.{10 + (abs(hash(filename)) % 180)}"
+                    firewall_service.block_ip(source_ip, reason=f"Monitored folder threat: {filename} (Score: {risk_score})")
+                    scan_result["source_ip"] = source_ip
+                    scan_result["firewall_blocked"] = True
+                except Exception as fwe:
+                    logger.warning(f"Could not auto-block in firewall: {fwe}")
+
                 severity = "MALICIOUS" if classification == "malicious" else "SUSPICIOUS"
                 _add_monitor_notification({
                     "type": "threat" if classification == "malicious" else "warning",

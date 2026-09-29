@@ -298,6 +298,11 @@ export const firewallAPI = {
   getZoneConnections: (zoneName) => api.get(`/firewall/zone-connections/${encodeURIComponent(zoneName)}`),
   checkConnection: (remoteIp, remotePort, localIp, localPort, protocol) =>
     api.get('/firewall/check', { params: { remote_ip: remoteIp, remote_port: remotePort, local_ip: localIp, local_port: localPort, protocol } }),
+  getRealtimeStatus: () => api.get('/firewall/realtime/status'),
+  startRealtime: () => api.post('/firewall/realtime/start'),
+  stopRealtime: () => api.post('/firewall/realtime/stop'),
+  simulateTraffic: (count = 5) => api.post(`/firewall/simulate-traffic?count=${count}`),
+  blockIp: (ip, reason) => api.post(`/firewall/block-ip?ip=${encodeURIComponent(ip)}&reason=${encodeURIComponent(reason || 'Manual block')}`),
 };
 
 export const sandboxAPI = {

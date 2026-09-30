@@ -11,14 +11,19 @@ import sys
 import base64
 from PIL import Image as PILImage
 
-# Paths to screenshots
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SCREENSHOTS_DIR = os.path.join(BASE_DIR, 'reports', 'screenshots')
+
 SCREENSHOTS = {
-    'dashboard': r'C:\Users\ashwi\.gemini\antigravity\brain\a6d368c2-d47f-4873-96d0-f2476fd0ecd8\dashboard_ashwin.png',
-    'login': r'C:\Users\ashwi\.gemini\antigravity\brain\a6d368c2-d47f-4873-96d0-f2476fd0ecd8\login_screen_updated.png',
-    'firewall': r'C:\Users\ashwi\.gemini\antigravity\brain\a6d368c2-d47f-4873-96d0-f2476fd0ecd8\.user_uploaded\media_1790692390797.png',
-    'antivirus': r'C:\Users\ashwi\.gemini\antigravity\brain\a6d368c2-d47f-4873-96d0-f2476fd0ecd8\.user_uploaded\media_1790666001631.png',
-    'email': r'C:\Users\ashwi\.gemini\antigravity\brain\a6d368c2-d47f-4873-96d0-f2476fd0ecd8\email_security_dashboard.png',
-    'sandbox': r'C:\Users\ashwi\.gemini\antigravity\brain\a6d368c2-d47f-4873-96d0-f2476fd0ecd8\.user_uploaded\media_1790757360064.png',
+    'dashboard': os.path.join(SCREENSHOTS_DIR, 'fig1_dashboard.png'),
+    'login': os.path.join(SCREENSHOTS_DIR, 'fig2_auth.png'),
+    'firewall': os.path.join(SCREENSHOTS_DIR, 'fig3_firewall.png'),
+    'antivirus': os.path.join(SCREENSHOTS_DIR, 'fig4_antivirus.png'),
+    'email': os.path.join(SCREENSHOTS_DIR, 'fig5_email_security.png'),
+    'email_monitor': os.path.join(SCREENSHOTS_DIR, 'fig6_email_monitor.png'),
+    'email_settings': os.path.join(SCREENSHOTS_DIR, 'fig7_email_settings.png'),
+    'sandbox': os.path.join(SCREENSHOTS_DIR, 'fig8_sandbox.png'),
+    'scanner': os.path.join(SCREENSHOTS_DIR, 'fig9_scanner.png'),
 }
 
 def get_b64_image(path):
@@ -956,26 +961,26 @@ quarantine_query = db.query(QuarantineItem).filter(QuarantineItem.user_id == use
 
   <div class="figure-container">
     <img src="{b64_imgs['dashboard']}" class="figure-img" alt="Executive Security Dashboard" style="max-height:85mm;">
-    <div class="figure-caption">Figure 1: ThreatShield Executive Security Dashboard showing metrics, risk score gauge, and recent scan logs.</div>
+    <div class="figure-caption">Figure 1: Operational Executive Security Dashboard for Ashwin_gowda1 (ADMIN) showing System Security Score (25/100, Risk: Good), Total Scanned: 4, Safe: 2 (50.0%), Suspicious: 2, Risk Distribution, File Types, and Recent Threat audit logs.</div>
   </div>
 
   <p>
     <strong>Key Components Displayed in Figure 1:</strong>
   </p>
   <ul>
-    <li><strong>System Security Score Gauge:</strong> Dynamically calculates an aggregated institutional risk rating between 0 and 100 based on the severity of analyzed threats. Scores \(\le 20\) receive an 'Excellent' green badge.</li>
-    <li><strong>Telemetry Metric Cards:</strong> Displays counts for Total Files Scanned, Safe Files (with percentage trend), Suspicious Files, Malicious Files, and Quarantined Artifacts.</li>
+    <li><strong>System Security Score Gauge:</strong> Dynamically calculates an aggregated institutional risk rating between 0 and 100 based on the severity of analyzed threats. Scores &le; 30 receive an 'Good / Low Risk' green badge.</li>
+    <li><strong>Telemetry Metric Cards:</strong> Displays live counts for Total Files Scanned (4), Safe Files (2, 50.0%), Suspicious Files (2), Malicious Files (0), and Quarantined Artifacts (0).</li>
     <li><strong>Recent Scans Table:</strong> Displays chronological logs of scanned files, including filenames, calculated risk scores, categorical verdicts, and timestamps.</li>
   </ul>
 
   <h3 class="section-title">7.2 Secure User Authentication & Access Control</h3>
   <p>
-    Access to the ThreatShield system is guarded by a role-based access control (RBAC) portal supporting both standard analysts (<code>USER</code>) and administrators (<code>ADMIN</code>).
+    Access to the ThreatShield system is guarded by a role-based access control (RBAC) portal supporting both standard analysts (<code>USER</code>) and administrators (<code>ADMIN</code>) with fast login presets and password masking.
   </p>
 
   <div class="figure-container">
     <img src="{b64_imgs['login']}" class="figure-img" alt="Secure Authentication Screen" style="max-height:80mm;">
-    <div class="figure-caption">Figure 2: ThreatShield Secure Authentication & Password Reset Portal with role-based session generation.</div>
+    <div class="figure-caption">Figure 2: Secure User Authentication Screen featuring JWT bearer token login, credentials input, 1-Click Fast Login for pre-configured roles, and password visibility toggle.</div>
   </div>
 
   <div class="page-footer">
@@ -995,12 +1000,12 @@ quarantine_query = db.query(QuarantineItem).filter(QuarantineItem.user_id == use
 
   <h3 class="section-title">8.1 DMZ Firewall Controller & Micro-Segmentation</h3>
   <p>
-    ThreatShield includes an interactive Demilitarized Zone (DMZ) Firewall controller that regulates ingress, egress, and lateral packet flows across enterprise zones.
+    ThreatShield includes an interactive Demilitarized Zone (DMZ) Firewall controller that regulates ingress, egress, and lateral packet flows across enterprise zones with live traffic burst injection.
   </p>
 
   <div class="figure-container">
     <img src="{b64_imgs['firewall']}" class="figure-img" alt="DMZ Firewall Interface" style="max-height:82mm;">
-    <div class="figure-caption">Figure 3: DMZ Firewall Management Console showing 4 network zones, active filtering rules, and live traffic vectors.</div>
+    <div class="figure-caption">Figure 3: Operational DMZ Firewall Management Console demonstrating 4 network zones (Public, DMZ, Internal, Management), 14 stateful inter-zone rules, 11,138 active connections, 2,846 blocked connection attempts, 411 blocked IP addresses, and interactive animated network topology flow arrows.</div>
   </div>
 
   <p>
@@ -1014,12 +1019,12 @@ quarantine_query = db.query(QuarantineItem).filter(QuarantineItem.user_id == use
 
   <h3 class="section-title">8.2 Real-Time Antivirus Protection & Engine Telemetry</h3>
   <p>
-    Figure 4 illustrates the Antivirus telemetry monitor providing continuous background protection across designated directory paths.
+    Figure 4 illustrates the Antivirus telemetry monitor providing continuous background protection across designated directory paths with 8 active detection engines.
   </p>
 
   <div class="figure-container">
     <img src="{b64_imgs['antivirus']}" class="figure-img" alt="Real-time Antivirus Telemetry" style="max-height:82mm;">
-    <div class="figure-caption">Figure 4: Real-Time Antivirus Telemetry displaying active multi-engine status and auto-quarantine controllers.</div>
+    <div class="figure-caption">Figure 4: Real-Time Antivirus Protection Telemetry with active protection status, 8 heuristic detection engines (Hash Lookup, Entropy Analysis, String Analysis, PE Analysis, Risk Scoring, Network Scanner, Firewall Integration, Zone Protection), system threat level gauge, and real-time auto-scan, auto-quarantine, and firewall auto-block toggles.</div>
   </div>
 
   <div class="page-footer">
@@ -1039,12 +1044,12 @@ quarantine_query = db.query(QuarantineItem).filter(QuarantineItem.user_id == use
 
   <h3 class="section-title">9.1 Automated IMAP Email Security Suite</h3>
   <p>
-    Phishing emails and malicious attachments constitute over 90% of initial enterprise breaches. ThreatShield features a dedicated background IMAP listener that continuously inspects incoming messages.
+    Phishing emails and malicious attachments constitute over 90% of initial enterprise breaches. ThreatShield features a dedicated background IMAP listener actively monitoring inbound messages in real time.
   </p>
 
   <div class="figure-container">
     <img src="{b64_imgs['email']}" class="figure-img" alt="Email Security Dashboard" style="max-height:82mm;">
-    <div class="figure-caption">Figure 5: Email Security Suite displaying monitored mailboxes, SPF/DKIM verification, and attachment scan logs.</div>
+    <div class="figure-caption">Figure 5: Enterprise Real-Time Email Security Suite demonstrating continuous IMAP monitoring of acchugowda9482@gmail.com with active polling, 79 monitored emails, 6 scanned attachments, 59 detected threats, 3 phishing emails, 5 quarantined attachments, 71 safe emails, historical threat trend graph, and risk classification donut chart.</div>
   </div>
 
   <p>
@@ -1053,7 +1058,7 @@ quarantine_query = db.query(QuarantineItem).filter(QuarantineItem.user_id == use
   <ul>
     <li><strong>Header Protocol Validation:</strong> Validates Sender Policy Framework (SPF), DomainKeys Identified Mail (DKIM), and DMARC compliance to detect email spoofing.</li>
     <li><strong>Attachment Extraction & Detonation:</strong> Automatically decouples attachments, hashes them, and routes them through the core heuristic analysis pipeline.</li>
-    <li><strong>App Password Security:</strong> Encrypts IMAP passwords using AES-GCM before storage, ensuring credentials are never exposed in plaintext.</li>
+    <li><strong>Real-Time Live Monitor:</strong> Streams live email ingestion events (100 events logged, polling every 5s) directly to the operational dashboard via WebSockets.</li>
   </ul>
 
   <h3 class="section-title">9.2 Dynamic File Sandbox Detonation</h3>
@@ -1063,7 +1068,7 @@ quarantine_query = db.query(QuarantineItem).filter(QuarantineItem.user_id == use
 
   <div class="figure-container">
     <img src="{b64_imgs['sandbox']}" class="figure-img" alt="File Sandbox Detonation" style="max-height:82mm;">
-    <div class="figure-caption">Figure 6: File Sandbox Detonation console showing file ingestion, behavioral analysis, and verdict evaluation.</div>
+    <div class="figure-caption">Figure 6: Dynamic File Sandbox Detonation Interface demonstrating isolated behavioral analysis, file upload dropzone, completed execution of job SBX-1a4eccec (its me.jpeg), behavioral risk assessment (verdict: suspicious), and execution audit report generation.</div>
   </div>
 
   <div class="page-footer">
@@ -1838,23 +1843,23 @@ def generate_pdf_report(output_path):
     story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor('#0284c7'), spaceAfter=8))
     story.append(Paragraph("7.1 Executive Security Dashboard", sec_title_style))
     story.append(Paragraph(
-        "Figure 1 displays the centralized ThreatShield Executive Dashboard providing real-time telemetry, threat distribution analytics, system security health scoring, and recent scan logs.",
+        "Figure 1 displays the centralized ThreatShield Executive Dashboard providing real-time telemetry, threat distribution analytics, system security health scoring, and recent scan logs for the active administrative session.",
         body_style
     ))
 
     if os.path.exists(SCREENSHOTS['dashboard']):
-        story.append(RLImage(SCREENSHOTS['dashboard'], width=470, height=210))
-        story.append(Paragraph("Figure 1: ThreatShield Executive Security Dashboard showing metrics, risk score gauge, and recent scan logs.", caption_style))
+        story.append(RLImage(SCREENSHOTS['dashboard'], width=470, height=205))
+        story.append(Paragraph("Figure 1: Operational Executive Security Dashboard for Ashwin_gowda1 (ADMIN) showing System Security Score (25/100, Risk: Good), Total Scanned: 4, Safe: 2 (50.0%), Suspicious: 2, Risk Distribution, File Types, and Recent Threat audit logs.", caption_style))
 
     story.append(Paragraph("7.2 Secure User Authentication & Access Control", sec_title_style))
     story.append(Paragraph(
-        "Figure 2 illustrates the secure authentication and password recovery portal supporting Role-Based Access Control (RBAC) across USER and ADMIN roles with JWT session issuance.",
+        "Figure 2 illustrates the secure authentication and password recovery portal supporting Role-Based Access Control (RBAC) across USER and ADMIN roles with 1-Click Fast Login and JWT session issuance.",
         body_style
     ))
 
     if os.path.exists(SCREENSHOTS['login']):
-        story.append(RLImage(SCREENSHOTS['login'], width=470, height=195))
-        story.append(Paragraph("Figure 2: ThreatShield Secure Authentication & Password Reset Portal with role-based session generation.", caption_style))
+        story.append(RLImage(SCREENSHOTS['login'], width=470, height=185))
+        story.append(Paragraph("Figure 2: Secure User Authentication Screen featuring JWT bearer token login, credentials input, 1-Click Fast Login for pre-configured roles, and password visibility toggle.", caption_style))
 
     story.append(PageBreak())
 
@@ -1863,23 +1868,23 @@ def generate_pdf_report(output_path):
     story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor('#0284c7'), spaceAfter=8))
     story.append(Paragraph("8.1 DMZ Firewall Controller & Micro-Segmentation", sec_title_style))
     story.append(Paragraph(
-        "Figure 3 shows the interactive Demilitarized Zone (DMZ) Firewall controller regulating packet flows across four topological zones (Public, DMZ, Internal, Management) with live traffic vectors.",
+        "Figure 3 shows the interactive Demilitarized Zone (DMZ) Firewall controller regulating packet flows across four topological zones (Public, DMZ, Internal, Management) with live traffic vectors and IP filtering.",
         body_style
     ))
 
     if os.path.exists(SCREENSHOTS['firewall']):
-        story.append(RLImage(SCREENSHOTS['firewall'], width=470, height=210))
-        story.append(Paragraph("Figure 3: DMZ Firewall Management Console showing 4 network zones, active filtering rules, and live traffic vectors.", caption_style))
+        story.append(RLImage(SCREENSHOTS['firewall'], width=470, height=200))
+        story.append(Paragraph("Figure 3: Operational DMZ Firewall Management Console demonstrating 4 network zones (Public, DMZ, Internal, Management), 14 stateful inter-zone rules, 11,138 active connections, 2,846 blocked connection attempts, 411 blocked IP addresses, and interactive animated network topology flow arrows.", caption_style))
 
     story.append(Paragraph("8.2 Real-Time Antivirus Protection & Engine Telemetry", sec_title_style))
     story.append(Paragraph(
-        "Figure 4 illustrates the Antivirus telemetry monitor providing continuous background protection across designated directory paths with automated threat quarantine.",
+        "Figure 4 illustrates the Antivirus telemetry monitor providing continuous background protection across designated directory paths with 8 active detection engines and automated quarantine controllers.",
         body_style
     ))
 
     if os.path.exists(SCREENSHOTS['antivirus']):
-        story.append(RLImage(SCREENSHOTS['antivirus'], width=470, height=195))
-        story.append(Paragraph("Figure 4: Real-Time Antivirus Telemetry displaying active multi-engine status and auto-quarantine controllers.", caption_style))
+        story.append(RLImage(SCREENSHOTS['antivirus'], width=470, height=185))
+        story.append(Paragraph("Figure 4: Real-Time Antivirus Protection Telemetry with active protection status, 8 heuristic detection engines (Hash Lookup, Entropy Analysis, String Analysis, PE Analysis, Risk Scoring, Network Scanner, Firewall Integration, Zone Protection), system threat level gauge, and real-time auto-scan, auto-quarantine, and firewall auto-block toggles.", caption_style))
 
     story.append(PageBreak())
 
@@ -1893,8 +1898,8 @@ def generate_pdf_report(output_path):
     ))
 
     if os.path.exists(SCREENSHOTS['email']):
-        story.append(RLImage(SCREENSHOTS['email'], width=470, height=210))
-        story.append(Paragraph("Figure 5: Email Security Suite displaying monitored mailboxes, SPF/DKIM verification, and attachment scan logs.", caption_style))
+        story.append(RLImage(SCREENSHOTS['email'], width=470, height=200))
+        story.append(Paragraph("Figure 5: Enterprise Real-Time Email Security Suite demonstrating continuous IMAP monitoring of acchugowda9482@gmail.com with active polling, 79 monitored emails, 6 scanned attachments, 59 detected threats, 3 phishing emails, 5 quarantined attachments, 71 safe emails, historical threat trend graph, and risk classification donut chart.", caption_style))
 
     story.append(Paragraph("9.2 Dynamic File Sandbox Detonation Environment", sec_title_style))
     story.append(Paragraph(
@@ -1903,8 +1908,8 @@ def generate_pdf_report(output_path):
     ))
 
     if os.path.exists(SCREENSHOTS['sandbox']):
-        story.append(RLImage(SCREENSHOTS['sandbox'], width=470, height=195))
-        story.append(Paragraph("Figure 6: File Sandbox Detonation console showing file ingestion, behavioral analysis, and verdict evaluation.", caption_style))
+        story.append(RLImage(SCREENSHOTS['sandbox'], width=470, height=185))
+        story.append(Paragraph("Figure 6: Dynamic File Sandbox Detonation Interface demonstrating isolated behavioral analysis, file upload dropzone, completed execution of job SBX-1a4eccec (its me.jpeg), behavioral risk assessment (verdict: suspicious), and execution audit report generation.", caption_style))
 
     story.append(PageBreak())
 

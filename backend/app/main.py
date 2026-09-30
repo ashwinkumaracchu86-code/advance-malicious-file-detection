@@ -288,7 +288,7 @@ async def lifespan(app: FastAPI):
             try:
                 from backend.import_email_folder import import_email_data
             except ImportError:
-                import sys, os
+                import sys
                 b_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
                 if b_dir not in sys.path:
                     sys.path.insert(0, b_dir)

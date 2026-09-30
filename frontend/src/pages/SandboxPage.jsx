@@ -1,11 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import {
   FiShield, FiUpload, FiCheckCircle,
   FiAlertTriangle, FiClock, FiRefreshCw, FiFile, FiActivity,
 } from 'react-icons/fi';
+import { sandboxAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 export default function SandboxPage() {
+  const { user } = useAuth();
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -13,31 +16,30 @@ export default function SandboxPage() {
   const [duration, setDuration] = useState(30);
   const [activeJob, setActiveJob] = useState(null);
 
+  const fetchJobs = useCallback(async () => {
+    try {
+      const res = await sandboxAPI.getJobs();
+      const rawJobs = res.data?.jobs || [];
+      const currentUid = user ? user.id : null;
+      const userJobs = rawJobs.filter(j => currentUid == null || j.user_id == null || j.user_id === currentUid);
+      setJobs(userJobs);
+    } catch (err) {
+      console.error('Failed to fetch sandbox jobs', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
   useEffect(() => {
     fetchJobs();
     const interval = setInterval(fetchJobs, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchJobs]);
 
-  const fetchJobs = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch('/sandbox/jobs', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setJobs(data.jobs || []);
-      } else {
-        setJobs([]);
-      }
-    } catch (err) {
-      console.error('Failed to fetch sandbox jobs', err);
-      setJobs([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  useEffect(() => {
+    setJobs([]);
+    fetchJobs();
+  }, [user?.id]);
 
   const handleUpload = async (file) => {
     if (!file) return;
@@ -47,30 +49,27 @@ export default function SandboxPage() {
       formData.append('file', file);
       formData.append('duration', String(duration));
 
-      const token = localStorage.getItem('token');
-      const res = await fetch('/sandbox/submit', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
-      });
+      const res = await sandboxAPI.submitFile(formData);
+      toast.success(res.data?.message || 'File submitted for sandbox analysis');
 
-      if (res.ok) {
-        const data = await res.json();
-        toast.success(data.message || 'File submitted for sandbox analysis');
-        fetchJobs();
-      } else {
-        let msg = 'Failed to submit file';
-        try {
-          const data = await res.json();
-          msg = data.detail || data.message || msg;
-        } catch {}
-        toast.error(msg);
+      if (res.data?.job_id) {
+        const optimisticJob = {
+          id: res.data.job_id,
+          filename: file.name,
+          duration,
+          status: 'running',
+          verdict: null,
+          behaviors: [],
+          created_at: new Date().toISOString(),
+          user_id: user?.id,
+        };
+        setJobs((prev) => [optimisticJob, ...prev.filter((j) => j.id !== res.data.job_id)]);
       }
+      fetchJobs();
     } catch (err) {
       console.error('Sandbox submit error:', err);
-      toast.error('Failed to submit file');
+      const msg = err.response?.data?.detail || err.response?.data?.message || err.message || 'Failed to submit file';
+      toast.error(msg);
     } finally {
       setUploading(false);
     }

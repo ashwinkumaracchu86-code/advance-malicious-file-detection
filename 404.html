@@ -1,27 +1,19 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/advance-malicious-file-detection/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ThreatShield 🛡️</title>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <title>Redirecting…</title>
     <script>
       (function () {
-        try {
-          var params = new URLSearchParams(window.location.search);
-          var p = params.get('p');
-          if (p && p.charAt(0) === '/') {
-            var base = window.location.pathname.replace(/\/+$/, '');
-            window.history.replaceState(null, '', base + p + window.location.hash);
-          }
-        } catch (e) {}
+        var base = '/advance-malicious-file-detection';
+        var path = window.location.pathname;
+        var rest = path.indexOf(base) === 0 ? path.slice(base.length) : path;
+        if (!rest || rest === '/') {
+          rest = '/';
+        }
+        window.location.replace(base + '/?p=' + encodeURIComponent(rest) + window.location.hash);
       })();
     </script>
-    <script type="module" crossorigin src="/advance-malicious-file-detection/assets/index-NZCRk4FJ.js"></script>
-    <link rel="stylesheet" crossorigin href="/advance-malicious-file-detection/assets/index-BVFgcpwn.css">
   </head>
-  <body>
-    <div id="root"></div>
-  </body>
+  <body></body>
 </html>

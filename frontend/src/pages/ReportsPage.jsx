@@ -4,23 +4,34 @@ import {
   FiFileText, FiDownload, FiClock, FiCalendar,
 } from 'react-icons/fi';
 import { scansAPI, reportsAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 export default function ReportsPage() {
+  const { user } = useAuth();
   const [scans, setScans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [downloadingId, setDownloadingId] = useState(null);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
-  useEffect(() => {
-    fetchScans();
-  }, []);
-
   const fetchScans = async () => {
+    if (!user) {
+      setScans([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const res = await scansAPI.list({ limit: 100 });
-      setScans(res.data.scans || res.data.results || res.data.items || res.data.data || []);
+      const rawScans = res.data.scans || res.data.results || res.data.items || res.data.data || [];
+      const currentUid = String(user.id);
+      const userScans = rawScans.filter((s) => {
+        const scanUid = s.user_id != null ? String(s.user_id) : null;
+        const fileUid = s.file?.uploaded_by != null ? String(s.file.uploaded_by) : null;
+        const uploadUid = s.uploaded_by != null ? String(s.uploaded_by) : null;
+        return scanUid === currentUid || fileUid === currentUid || uploadUid === currentUid;
+      });
+      setScans(userScans);
     } catch (err) {
       console.error('Failed to fetch scans', err);
       setScans([]);
@@ -28,6 +39,11 @@ export default function ReportsPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    setScans([]);
+    fetchScans();
+  }, [user?.id]);
 
   const handleDownload = async (scanId, filename) => {
     setDownloadingId(scanId);

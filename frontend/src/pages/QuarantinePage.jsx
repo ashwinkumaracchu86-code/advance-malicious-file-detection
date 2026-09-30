@@ -5,6 +5,7 @@ import {
   FiAlertTriangle, FiCheckCircle, FiX,
 } from 'react-icons/fi';
 import { quarantineAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 function ConfirmModal({ open, onClose, onConfirm, title, message }) {
   if (!open) return null;
@@ -44,21 +45,31 @@ function ConfirmModal({ open, onClose, onConfirm, title, message }) {
 }
 
 export default function QuarantinePage() {
+  const { user } = useAuth();
   const [quarantineList, setQuarantineList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [restoringId, setRestoringId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
 
-  useEffect(() => {
-    fetchQuarantine();
-  }, []);
-
   const fetchQuarantine = async () => {
+    if (!user) {
+      setQuarantineList([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const res = await quarantineAPI.list();
-      setQuarantineList(res.data.items || res.data.results || res.data || []);
+      const rawItems = res.data.items || res.data.results || (Array.isArray(res.data) ? res.data : []);
+      const currentUid = String(user.id);
+      const userItems = rawItems.filter((item) => {
+        const itemUid = item.user_id != null ? String(item.user_id) : null;
+        const uploadUid = item.uploaded_by != null ? String(item.uploaded_by) : null;
+        if (itemUid == null && uploadUid == null) return true;
+        return itemUid === currentUid || uploadUid === currentUid;
+      });
+      setQuarantineList(userItems);
     } catch (err) {
       console.error('Failed to fetch quarantine list', err);
       setQuarantineList([]);
@@ -66,6 +77,11 @@ export default function QuarantinePage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    setQuarantineList([]);
+    fetchQuarantine();
+  }, [user?.id]);
 
   const handleRestore = async (id) => {
     setRestoringId(id);

@@ -55,8 +55,16 @@ export default function ScanHistoryPage() {
 
       const res = await scansAPI.list(params);
       const data = res.data;
-      setScans(data.scans || data.results || data.items || []);
-      setTotalCount(data.total || data.count || 0);
+      const rawScans = data.scans || data.results || data.items || [];
+      const currentUid = String(user.id);
+      const userScans = rawScans.filter((s) => {
+        const scanUid = s.user_id != null ? String(s.user_id) : null;
+        const fileUid = s.file?.uploaded_by != null ? String(s.file.uploaded_by) : null;
+        const uploadUid = s.uploaded_by != null ? String(s.uploaded_by) : null;
+        return scanUid === currentUid || fileUid === currentUid || uploadUid === currentUid;
+      });
+      setScans(userScans);
+      setTotalCount(userScans.length);
     } catch (err) {
       console.error('Failed to fetch scan history', err);
       setScans([]);

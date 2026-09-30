@@ -10,7 +10,7 @@ import {
   AreaChart, Area,
 } from 'recharts';
 import toast from 'react-hot-toast';
-import { dashboardAPI, antivirusAPI, realtimeAPI } from '../services/api';
+import { dashboardAPI, scansAPI, antivirusAPI, realtimeAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 const COLORS = {
@@ -58,8 +58,111 @@ export default function DashboardPage() {
     }
     setLoading(true);
     try {
-      const res = await dashboardAPI.getStats();
-      setStats(res.data);
+      const [statsRes, scansRes] = await Promise.allSettled([
+        dashboardAPI.getStats(),
+        scansAPI.list({ limit: 100 }),
+      ]);
+
+      const rawStats = statsRes.status === 'fulfilled' ? statsRes.value.data : null;
+      const rawScans = scansRes.status === 'fulfilled'
+        ? (scansRes.value.data?.scans || scansRes.value.data?.results || scansRes.value.data?.items || [])
+        : [];
+
+      const currentUid = String(user.id);
+
+      // Strict user isolation filter: scans must belong ONLY to the active user
+      const userScans = rawScans.filter((s) => {
+        const scanUid = s.user_id != null ? String(s.user_id) : null;
+        const fileUid = s.file?.uploaded_by != null ? String(s.file.uploaded_by) : null;
+        const uploadUid = s.uploaded_by != null ? String(s.uploaded_by) : null;
+        return scanUid === currentUid || fileUid === currentUid || uploadUid === currentUid;
+      });
+
+      // Check whether backend stats leak any non-owner data
+      const recentFromBackend = rawStats?.recent_scans || [];
+      const hasForeignScans = recentFromBackend.some((rs) => {
+        const matching = rawScans.find((s) => s.id === rs.id);
+        if (matching) {
+          const mScanUid = matching.user_id != null ? String(matching.user_id) : null;
+          const mFileUid = matching.file?.uploaded_by != null ? String(matching.file.uploaded_by) : null;
+          return (mScanUid && mScanUid !== currentUid) || (mFileUid && mFileUid !== currentUid);
+        }
+        return false;
+      });
+
+      if (userScans.length === 0) {
+        // Current user has no scans: present completely clean zero-state
+        setStats({
+          total_scans: 0,
+          total_files: 0,
+          safe_count: 0,
+          suspicious_count: 0,
+          malicious_count: 0,
+          quarantined_count: 0,
+          detection_percentage: 0,
+          recent_scans: [],
+          risk_distribution: { safe: 0, low_risk: 0, suspicious: 0, malicious: 0 },
+          file_type_distribution: {},
+          daily_scans: [],
+        });
+      } else if (hasForeignScans || (rawStats && rawStats.total_scans !== userScans.length)) {
+        // Derive clean, accurate stats from user's isolated scans
+        const total = userScans.length;
+        const safeCount = userScans.filter((s) => ['safe', 'low_risk'].includes(s.classification?.toLowerCase())).length;
+        const suspiciousCount = userScans.filter((s) => s.classification?.toLowerCase() === 'suspicious').length;
+        const maliciousCount = userScans.filter((s) => s.classification?.toLowerCase() === 'malicious').length;
+        const quarantinedCount = userScans.filter((s) => s.is_quarantined || s.file?.is_quarantined).length;
+        const detectionPct = total > 0 ? Number((((suspiciousCount + maliciousCount) / total) * 100).toFixed(2)) : 0;
+
+        const fileTypes = {};
+        userScans.forEach((s) => {
+          const fn = s.filename || s.file?.original_filename || '';
+          const ext = s.file?.extension || (fn.includes('.') ? '.' + fn.split('.').pop().toLowerCase() : 'other');
+          fileTypes[ext] = (fileTypes[ext] || 0) + 1;
+        });
+
+        const dailyMap = {};
+        userScans.forEach((s) => {
+          const dateStr = s.scan_date || s.created_at;
+          if (dateStr) {
+            const day = dateStr.slice(0, 10);
+            dailyMap[day] = (dailyMap[day] || 0) + 1;
+          }
+        });
+        const dailyScans = Object.entries(dailyMap).map(([date, count]) => ({ date, count }));
+
+        const recentList = userScans.slice(0, 10).map((s) => ({
+          id: s.id,
+          filename: s.filename || s.file?.original_filename || 'Unknown',
+          risk_score: s.risk_score || 0,
+          classification: s.classification || 'unknown',
+          scan_date: s.scan_date || s.created_at,
+          detection_reasons: typeof s.detection_reasons === 'string'
+            ? (() => { try { return JSON.parse(s.detection_reasons); } catch { return []; } })()
+            : (Array.isArray(s.detection_reasons) ? s.detection_reasons : []),
+        }));
+
+        setStats({
+          total_scans: total,
+          total_files: new Set(userScans.map((s) => s.file_id || s.file?.id || s.id)).size,
+          safe_count: safeCount,
+          suspicious_count: suspiciousCount,
+          malicious_count: maliciousCount,
+          quarantined_count: quarantinedCount,
+          detection_percentage: detectionPct,
+          recent_scans: recentList,
+          risk_distribution: {
+            safe: userScans.filter((s) => s.classification?.toLowerCase() === 'safe').length,
+            low_risk: userScans.filter((s) => s.classification?.toLowerCase() === 'low_risk').length,
+            suspicious: suspiciousCount,
+            malicious: maliciousCount,
+          },
+          file_type_distribution: fileTypes,
+          daily_scans: dailyScans,
+        });
+      } else {
+        setStats(rawStats);
+      }
     } catch {
       console.error('Failed to fetch dashboard stats');
     } finally {
@@ -225,7 +328,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {[
           { icon: FiFile, count: total, label: 'Total Scanned', color: 'text-cyan-400', bg: 'from-cyan-500/20 to-blue-500/20', border: 'border-cyan-500/20', trend: null },
-          { icon: FiCheckCircle, count: safe, label: 'Safe Files', color: 'text-green-400', bg: 'from-green-500/20 to-emerald-500/20', border: 'border-green-500/20', trend: safeRate + '%' },
+          { icon: FiCheckCircle, count: safe, label: 'Safe Files', color: 'text-green-400', bg: 'from-green-500/20 to-emerald-500/20', border: 'border-green-500/20', trend: total > 0 ? safeRate + '%' : null },
           { icon: FiAlertTriangle, count: suspicious, label: 'Suspicious', color: 'text-yellow-400', bg: 'from-yellow-500/20 to-orange-500/20', border: 'border-yellow-500/20', trend: null },
           { icon: FiXOctagon, count: malicious, label: 'Malicious', color: 'text-red-400', bg: 'from-red-500/20 to-pink-500/20', border: 'border-red-500/20', trend: null },
           { icon: FiShield, count: quarantined, label: 'Quarantined', color: 'text-orange-400', bg: 'from-orange-500/20 to-amber-500/20', border: 'border-orange-500/20', trend: null },
@@ -381,7 +484,8 @@ export default function DashboardPage() {
                   <tr>
                     <td colSpan={4} className="px-6 py-12 text-dark-500 text-center">
                       <FiEye className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                      <p className="text-sm">No scans yet</p>
+                      <p className="text-sm font-medium text-dark-300">No scan history available</p>
+                      <p className="text-xs text-dark-500 mt-1">Upload and scan a file to start building your personal scan history</p>
                     </td>
                   </tr>
                 ) : (

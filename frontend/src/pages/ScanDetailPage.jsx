@@ -7,6 +7,7 @@ import {
   FiInfo, FiCode, FiTrash2,
 } from 'react-icons/fi';
 import { scansAPI, quarantineAPI, reportsAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 function CopyButton({ text }) {
   const [copied, setCopied] = useState(false);
@@ -92,6 +93,7 @@ function RiskGauge({ score }) {
 export default function ScanDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -105,6 +107,17 @@ export default function ScanDetailPage() {
       .then((res) => {
         const scan = res.data;
         const file = scan.file || {};
+        const currentUid = user ? String(user.id) : null;
+        const scanUid = scan.user_id != null ? String(scan.user_id) : null;
+        const fileUid = file.uploaded_by != null ? String(file.uploaded_by) : null;
+        const uploadUid = scan.uploaded_by != null ? String(scan.uploaded_by) : null;
+
+        if (currentUid && scanUid && scanUid !== currentUid && fileUid !== currentUid && uploadUid !== currentUid) {
+          setError('Access Denied: You do not have permission to access this scan.');
+          setData(null);
+          return;
+        }
+
         setData({
           ...scan,
           ...file,

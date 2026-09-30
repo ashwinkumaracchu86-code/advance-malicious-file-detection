@@ -49,6 +49,15 @@ export function AuthProvider({ children }) {
   const login = async (username, password) => {
     const res = await authAPI.login(username, password);
     const { access_token, refresh_token, user: userData } = res.data;
+
+    const savedTheme = localStorage.getItem('theme') || localStorage.getItem('mfds-theme');
+    localStorage.clear();
+    sessionStorage.clear();
+    if (savedTheme) {
+      localStorage.setItem('theme', savedTheme);
+      localStorage.setItem('mfds-theme', savedTheme);
+    }
+
     localStorage.setItem('token', access_token);
     if (refresh_token) {
       localStorage.setItem('refreshToken', refresh_token);
@@ -59,11 +68,12 @@ export function AuthProvider({ children }) {
   };
 
   const logout = () => {
-    const savedTheme = localStorage.getItem('theme');
+    const savedTheme = localStorage.getItem('theme') || localStorage.getItem('mfds-theme');
     localStorage.clear();
     sessionStorage.clear();
     if (savedTheme) {
       localStorage.setItem('theme', savedTheme);
+      localStorage.setItem('mfds-theme', savedTheme);
     }
     setUser(null);
   };

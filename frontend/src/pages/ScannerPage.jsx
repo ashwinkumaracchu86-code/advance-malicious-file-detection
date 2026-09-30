@@ -7,6 +7,7 @@ import {
 } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import { filesAPI, scansAPI, antivirusAPI, realtimeAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 const SCAN_OPTIONS = [
   { id: 'hash', label: 'Hash Lookup', desc: 'Known malware DB', default: true },
@@ -17,6 +18,7 @@ const SCAN_OPTIONS = [
 ];
 
 export default function ScannerPage() {
+  const { user } = useAuth();
   const [files, setFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -27,6 +29,11 @@ export default function ScannerPage() {
   const [scanOptions, setScanOptions] = useState(SCAN_OPTIONS.reduce((acc, o) => ({ ...acc, [o.id]: o.default }), {}));
   const [showOptions, setShowOptions] = useState(false);
   const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    setFiles([]);
+    setResult(null);
+  }, [user?.id]);
 
   useEffect(() => {
     antivirusAPI.getStatus().then((res) => setAutoScanEnabled(res.data.auto_scan_enabled)).catch(() => {});

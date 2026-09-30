@@ -11,6 +11,7 @@ import {
 } from 'react-icons/fi';
 import { antivirusAPI, realtimeAPI } from '../services/api';
 import { useWebSocket } from '../hooks/useWebSocket';
+import { useAuth } from '../context/AuthContext';
 
 const ENGINES = [
   { name: 'Hash Lookup', desc: 'Known malware DB', icon: FiSearch, status: 'active' },
@@ -48,6 +49,7 @@ const ThreatLevelBar = ({ score }) => {
 };
 
 export default function AntivirusPage() {
+  const { user } = useAuth();
   const [status, setStatus] = useState(null);
   const [stats, setStats] = useState(null);
   const [notifications, setNotifications] = useState([]);
@@ -76,6 +78,10 @@ export default function AntivirusPage() {
   const handleWsMessage = useCallback((msg) => {
     if (msg.type === 'scan_result') {
       const result = msg.data;
+      const currentUid = user ? String(user.id) : null;
+      const resUid = result.user_id != null ? String(result.user_id) : null;
+      if (resUid && currentUid && resUid !== currentUid) return;
+
       setLiveScanResults((prev) => [result, ...prev].slice(0, 50));
       setScanHistory((prev) => [result, ...prev].slice(0, 200));
       setStats((prev) => {
@@ -96,12 +102,17 @@ export default function AntivirusPage() {
         toast(`Suspicious: "${result.filename}" (Score: ${result.risk_score})`, { icon: '⚠️' });
       }
     } else if (msg.type === 'notification') {
-      setNotifications((prev) => [msg.data, ...prev].slice(0, 100));
-      if (msg.data.type === 'threat') toast.error(msg.data.message);
+      const notif = msg.data;
+      const currentUid = user ? String(user.id) : null;
+      const notifUid = notif.user_id != null ? String(notif.user_id) : null;
+      if (notifUid && currentUid && notifUid !== currentUid) return;
+
+      setNotifications((prev) => [notif, ...prev].slice(0, 100));
+      if (notif.type === 'threat') toast.error(notif.message);
     } else if (msg.type === 'firewall_event') {
       fetchFirewallData();
     }
-  }, []);
+  }, [user]);
 
   const { connected } = useWebSocket(handleWsMessage);
 
@@ -116,7 +127,13 @@ export default function AntivirusPage() {
       setStatus(statusRes.data);
       setStats(statsRes.data);
       setNotifications(notifRes.data.notifications || []);
-      const history = histRes.data.history || [];
+      const rawHistory = histRes.data.history || [];
+      const currentUid = user ? String(user.id) : null;
+      const history = rawHistory.filter((s) => {
+        if (!currentUid) return false;
+        const sUid = s.user_id != null ? String(s.user_id) : null;
+        return sUid == null || sUid === currentUid;
+      });
       setScanHistory(history);
       setLiveScanResults((prev) => (prev.length === 0 && history.length > 0 ? history.slice(0, 20) : prev));
       setProtectionEnabled(statusRes.data.protection_enabled);
@@ -128,7 +145,13 @@ export default function AntivirusPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
+
+  useEffect(() => {
+    setScanHistory([]);
+    setLiveScanResults([]);
+    setNotifications([]);
+  }, [user?.id]);
 
   const fetchFirewallData = useCallback(async () => {
     try {

@@ -7,6 +7,7 @@ import {
   FiAlertTriangle, FiTrendingUp, FiBarChart2,
 } from 'react-icons/fi';
 import { logsAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 const ACTION_TYPES = [
   { value: '', label: 'All Actions' },
@@ -99,6 +100,7 @@ function ActionBadge({ action }) {
 }
 
 export default function SecurityLogsPage() {
+  const { user } = useAuth();
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -118,10 +120,16 @@ export default function SecurityLogsPage() {
       if (actionFilter) params.action = actionFilter;
       const res = await logsAPI.list(params);
       const data = res.data;
-      const items = data.items || data.results || data.logs || [];
+      const rawItems = data.items || data.results || data.logs || [];
+      const currentUid = user ? String(user.id) : null;
+      const items = rawItems.filter((log) => {
+        if (!currentUid) return false;
+        const logUid = log.user_id != null ? String(log.user_id) : null;
+        return logUid == null || logUid === currentUid;
+      });
       setLogs(items);
-      setTotalPages(data.total_pages || Math.ceil((data.total || 0) / pageSize) || 1);
-      setTotalCount(data.total || data.count || 0);
+      setTotalPages(Math.max(1, Math.ceil(items.length / pageSize)));
+      setTotalCount(items.length);
 
       let success = 0, failure = 0, warning = 0;
       items.forEach((log) => {
@@ -130,14 +138,20 @@ export default function SecurityLogsPage() {
         else if (['failure', 'failed', 'malicious'].includes(r)) failure++;
         else if (['warning', 'suspicious'].includes(r)) warning++;
       });
-      setStats({ total: data.total || items.length, success, failure, warning });
+      setStats({ total: items.length, success, failure, warning });
     } catch (err) {
       console.error('Failed to fetch security logs', err);
       setLogs([]);
     } finally {
       setLoading(false);
     }
-  }, [page, search, actionFilter]);
+  }, [page, search, actionFilter, user]);
+
+  useEffect(() => {
+    setLogs([]);
+    setTotalCount(0);
+    setPage(1);
+  }, [user?.id]);
 
   useEffect(() => {
     setLoading(true);

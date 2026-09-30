@@ -99,6 +99,7 @@ function AppRoutes() {
         <Route path="settings" element={<SettingsPage />} />
         <Route path="profile" element={<UserRoute><ProfilePage /></UserRoute>} />
         <Route path="system-health" element={<SystemHealthPage />} />
+        <Route path="system-info" element={<SystemHealthPage />} />
         <Route path="scheduled-scans" element={<ScheduledScansPage />} />
         <Route path="export" element={<ExportPage />} />
         <Route path="webhooks" element={<WebhooksPage />} />

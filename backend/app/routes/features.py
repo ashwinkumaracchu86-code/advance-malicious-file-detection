@@ -31,6 +31,28 @@ def system_health_public():
     return health_service.get_system_health()
 
 
+@router.get("/health/processes")
+def get_processes_endpoint(
+    search: Optional[str] = Query(None, description="Search term for process name or PID"),
+    sort_by: str = Query("cpu", description="Field to sort by: cpu, memory, name, pid"),
+    order: str = Query("desc", description="Sort order: asc or desc"),
+    limit: int = Query(150, ge=1, le=500),
+    current_user: User = Depends(get_current_user),
+):
+    """Get running processes list for Task Manager."""
+    return health_service.get_processes(search=search, sort_by=sort_by, order=order, limit=limit)
+
+
+@router.post("/health/processes/{pid}/kill")
+def kill_process_endpoint(
+    pid: int,
+    force: bool = Query(False, description="Force kill process (SIGKILL)"),
+    current_user: User = Depends(get_current_user),
+):
+    """Terminate or kill a process by PID."""
+    return health_service.kill_process(pid=pid, force=force)
+
+
 @router.get("/webhooks/status")
 def webhook_status(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Get webhook configuration status."""

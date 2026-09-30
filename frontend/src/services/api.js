@@ -214,6 +214,8 @@ export const usbScannerAPI = {
 
 export const featuresAPI = {
   getSystemHealth: () => api.get('/health/public'),
+  getProcesses: (params) => api.get('/health/processes', { params }),
+  killProcess: (pid, force = false) => api.post(`/health/processes/${pid}/kill`, null, { params: { force } }),
   getWebhookStatus: () => api.get('/webhooks/status'),
   saveWebhookConfig: (data) => api.post('/webhooks/save', null, { params: data }),
   testWebhooks: () => api.post('/webhooks/test'),

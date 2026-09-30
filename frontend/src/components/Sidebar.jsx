@@ -66,7 +66,7 @@ const NAV_SECTIONS = [
   {
     title: 'System',
     items: [
-      { path: '/system-health', label: 'System Health', icon: FiMonitor },
+      { path: '/system-health', label: 'System Information', icon: FiMonitor },
       { path: '/security-logs', label: 'Security Logs', icon: FiActivity },
       { path: '/settings', label: 'Settings', icon: FiSettings },
     ],
@@ -153,7 +153,9 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen = false, onMob
                 <div className="mx-2 my-2 border-t border-dark-700/50" />
               )}
               {section.items.map(({ path, label, icon: Icon }) => {
-                const isActive = location.pathname === path || (path !== '/' && location.pathname.startsWith(path));
+                const isActive = location.pathname === path ||
+                  (path !== '/' && location.pathname.startsWith(path)) ||
+                  (path === '/system-health' && location.pathname.startsWith('/system-info'));
                 return (
                   <NavLink
                     key={path}
